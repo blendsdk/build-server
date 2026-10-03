@@ -25,7 +25,7 @@ new_sandbox() {
     printf '#!/bin/bash\nprintf "docker %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"container inspect"*) printf "%%s\\n" "${LEGACY_PROJECT:-}"; exit "${INSPECT_EXIT:-0}" ;;\n    *"image inspect"*) exit "${IMAGE_INSPECT_EXIT:-0}" ;;\nesac\nexit "${DOCKER_EXIT:-0}"\n' \
         > "${dir}/bin/docker"
     # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
-    printf '#!/bin/bash\nprintf "curl %%s\\n" "$*" >> "${TRACE}"\nprintf "%%s" "${CURL_BODY:-}"\nprintf "\\n%%s" "${CURL_HTTP_CODE:-200}"\nexit "${CURL_EXIT:-0}"\n' \
+    printf '#!/bin/bash\nprintf "curl %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"-X DELETE"*) code="${DELETE_HTTP_CODE:-204}" ;;\n    *) code="${CURL_HTTP_CODE:-200}" ;;\nesac\ncase "$*" in\n    *"-o /dev/null"*) printf "%%s" "${code}" ;;\n    *) printf "%%s\\n%%s" "${CURL_BODY:-}" "${code}" ;;\nesac\nexit "${CURL_EXIT:-0}"\n' \
         > "${dir}/bin/curl"
     chmod +x "${dir}/bin/docker" "${dir}/bin/curl"
     printf 'key' > "${dir}/home/.ssh/id_rsa"
@@ -251,6 +251,54 @@ LEGACY_PROJECT="someone-else" run_fleet "${S}" up >/dev/null 2>&1 ||
     fail "up should succeed when the inspected containers belong to another project"
 grep -q 'docker rm -f' "${S}/trace" && fail "containers of other projects must not be removed"
 echo "PASS: containers of other projects are left alone"
+
+# --- down removes this installation's runner registrations -----------------------------------
+S="${T}/down-unregister"
+new_sandbox "${S}"
+: > "${S}/trace"
+CURL_BODY='{"total_count":3,"runners":[{"id":11,"name":"Alpha_alpha_runner_1"},{"id":22,"name":"Beta_beta_runner_1"},{"id":33,"name":"Someone_else_runner"}]}' \
+    CURL_HTTP_CODE=200 run_fleet "${S}" down >"${S}/out" 2>&1 ||
+    fail "down should succeed while removing runner registrations"
+grep -qF '/orgs/Alpha/actions/runners?per_page=100' "${S}/trace" ||
+    fail "down must list the Alpha runners"
+grep -qF '/orgs/Beta/actions/runners?per_page=100' "${S}/trace" ||
+    fail "down must list the Beta runners"
+grep -F '/orgs/Alpha/actions/runners/11' "${S}/trace" | grep -q -- '-X DELETE' ||
+    fail "down must delete the matching Alpha runner"
+grep -F '/orgs/Beta/actions/runners/22' "${S}/trace" | grep -q -- '-X DELETE' ||
+    fail "down must delete the matching Beta runner"
+grep -q 'runners/33' "${S}/trace" && fail "runners with other names must not be deleted"
+grep -qF 'removed runner Alpha_alpha_runner_1 from Alpha' "${S}/out" ||
+    fail "the removal should be reported"
+DOWN_LINE="$(grep -n 'down --remove-orphans' "${S}/trace" | head -1 | cut -d: -f1)"
+DELETE_LINE="$(grep -n -- '-X DELETE' "${S}/trace" | head -1 | cut -d: -f1)"
+if [ -z "${DOWN_LINE}" ] || [ -z "${DELETE_LINE}" ] || [ "${DOWN_LINE}" -ge "${DELETE_LINE}" ]; then
+    fail "runners must be removed after the fleet is stopped"
+fi
+echo "PASS: down removes this installation's runner registrations"
+
+# --- API errors are warnings; the fleet is already stopped -----------------------------------
+S="${T}/down-unregister-error"
+new_sandbox "${S}"
+CURL_BODY='{"total_count":0,"runners":[]}' CURL_HTTP_CODE=500 run_fleet "${S}" down >"${S}/out" 2>&1 ||
+    fail "down must succeed even when the API call fails"
+grep -qi 'WARNING' "${S}/out" || fail "an API failure must be reported as a warning"
+grep -q -- '-X DELETE' "${S}/trace" && fail "nothing may be deleted when the list call fails"
+echo "PASS: API errors are reported but do not fail down"
+
+# --- down without a token warns and keeps the registrations ----------------------------------
+S="${T}/down-no-token"
+new_sandbox "${S}"
+set +e
+(cd "${S}" && HOME="${S}/home" TRACE="${S}/trace" PATH="${S}/bin:${PATH}" \
+    CURL_BODY='{"total_count":0,"runners":[]}' CURL_HTTP_CODE=200 bash fleet.sh down) \
+    >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -eq 0 ] || fail "down must succeed without a token"
+grep -q 'ACCESS_TOKEN' "${S}/out" || fail "the missing token must be named"
+grep -q 'actions/runners' "${S}/trace" && fail "no runner API call may happen without a token"
+echo "PASS: a missing token warns and keeps the registrations"
 
 # --- error paths leave the pinned version untouched ----------------------------------------
 S="${T}/api-fail"

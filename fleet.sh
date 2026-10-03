@@ -403,6 +403,52 @@ remove_legacy_containers() {
     done
 }
 
+# Remove the GitHub runner registrations that belong to this installation. Registration tokens
+# fetched by the runner at start expire after an hour, so stopping the containers is not a
+# reliable way to clean up; `down` calls the API directly. Failures are reported but never fail
+# the command, because the fleet is already stopped at this point.
+unregister_runners() {
+    local i org api runner_name page response status payload count id delete_status
+    if [ -z "${ACCESS_TOKEN:-}" ]; then
+        echo "fleet: WARNING: ACCESS_TOKEN is not set; runner registrations were not removed" >&2
+        return 0
+    fi
+    for i in "${!ORG_NAMES[@]}"; do
+        org="${ORG_NAMES[$i]}"
+        api="${ORG_APIS[$i]}"
+        runner_name="${org}_${ORG_SLUGS[$i]}_runner_1"
+        page=1
+        while :; do
+            response="$(curl -sS \
+                -H "Authorization: token ${ACCESS_TOKEN}" \
+                -H 'Accept: application/vnd.github+json' \
+                -w $'\n%{http_code}' \
+                "${api}/orgs/${org}/actions/runners?per_page=100&page=${page}" || true)"
+            status="${response##*$'\n'}"
+            payload="${response%$'\n'*}"
+            if [ "${status}" != "200" ]; then
+                echo "fleet: WARNING: could not list runners for ${org} (HTTP ${status}); registrations were not removed" >&2
+                break
+            fi
+            count="$(jq -r '.runners | length' <<<"${payload}" 2>/dev/null || echo 0)"
+            while read -r id; do
+                [ -n "${id}" ] || continue
+                delete_status="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+                    -H "Authorization: token ${ACCESS_TOKEN}" \
+                    -H 'Accept: application/vnd.github+json' \
+                    "${api}/orgs/${org}/actions/runners/${id}" || true)"
+                if [ "${delete_status}" = "204" ]; then
+                    echo "fleet: removed runner ${runner_name} from ${org}"
+                else
+                    echo "fleet: WARNING: could not remove runner ${runner_name} from ${org} (HTTP ${delete_status})" >&2
+                fi
+            done < <(jq -r --arg name "${runner_name}" '.runners[]? | select(.name == $name) | .id' <<<"${payload}" 2>/dev/null || true)
+            [ "${count:-0}" -ge 100 ] || break
+            page=$((page + 1))
+        done
+    done
+}
+
 # Fail fast with a clear message when a runner image has not been built locally.
 require_images() {
     local i slug image
@@ -457,6 +503,7 @@ case "${COMMAND}" in
         render_compose
         remove_legacy_containers
         compose down --remove-orphans
+        unregister_runners
         ;;
     stop)
         parse_config

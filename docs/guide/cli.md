@@ -8,7 +8,7 @@
 | `./fleet.sh generate` | Renders `docker-compose.generated.yml` from `orgs.conf` |
 | `./fleet.sh build [org]` | Builds the default `runner-image`, or one org's custom image |
 | `./fleet.sh up` | Starts the registry and every runner (`up -d`) |
-| `./fleet.sh down` | Stops and removes the fleet, including orphan containers |
+| `./fleet.sh down` | Stops and removes the fleet, including orphan containers, and removes this installation's runner registrations from GitHub |
 | `./fleet.sh stop` / `start` | Pauses and resumes containers without removing them |
 | `./fleet.sh restart` | Recreates the fleet; removes containers of deleted organizations |
 | `./fleet.sh update <org>` | Rebuilds one org's image and recreates only that runner |
@@ -54,5 +54,8 @@ Build the default image once (`./fleet.sh build`) and each custom-context image 
 
 - `update <org>` and `update-runners` recreate containers and kill any job running on the affected
   runners. Run them between jobs.
+- `down` removes the runner registrations for the configured organizations through the GitHub API,
+  so the organizations do not list offline runners afterwards. `up` registers them again. Without
+  `ACCESS_TOKEN`, `down` warns and keeps the registrations.
 - Admin commands are not designed for concurrent invocation.
 - `status` and `generate` are read-mostly; the playground exercises all of them safely.
