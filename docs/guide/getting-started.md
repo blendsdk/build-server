@@ -36,6 +36,7 @@ Useful flags and variables:
 | `ORGS` | Space- or comma-separated organization names (unattended equivalent of `--orgs`) |
 | `REGISTRY_USER`, `REGISTRY_PASS` | Registry credentials (`ci` and a generated password by default) |
 | `REGISTRY_HTTP_SECRET` | Registry signing secret (generated when absent) |
+| `REGISTRY_PORT` | Host port for the registry (default 5000; the installer picks a free port when 5000 is taken) |
 | `INSTALL_DIR` | Checkout location (default `$HOME/build-server`) |
 | `GIT_AUTH` | `token` (default) or `ssh`; flags win over the variable |
 | `SSH_KEY` | Key used for the checkout (default `~/.ssh/id_rsa`) |
@@ -45,7 +46,8 @@ Re-run the same command any time to update the checkout and fleet.
 
 The installer asks which organizations to serve and verifies each by minting a runner registration
 token — the same permission the fleet needs. It then writes `orgs.conf`, builds the default image
-**and every custom-context image**, and starts the fleet.
+**and every custom-context image**, and starts the fleet. If host port 5000 is already taken, it
+selects the next free port for the registry and records it as `REGISTRY_PORT` in `.env`.
 
 ## Repository access
 

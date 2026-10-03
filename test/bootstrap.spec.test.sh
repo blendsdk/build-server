@@ -95,6 +95,18 @@ printf '%s ssh-ed25519 AAAATESTKEY\n' "${1:-github.com}"
 exit 0
 EOF
 
+    # Reports a listening port only when SS_BUSY_PORT names it.
+    cat > "${bin}/ss" <<'EOF'
+#!/bin/bash
+last=""
+for arg in "$@"; do last="${arg}"; done
+port="${last##*:}"
+if [ -n "${SS_BUSY_PORT:-}" ] && [ "${port}" = "${SS_BUSY_PORT}" ]; then
+    printf 'LISTEN 0 4096 *:%s *:*\n' "${port}"
+fi
+exit 0
+EOF
+
     cat > "${bin}/sg" <<'EOF'
 #!/bin/bash
 printf 'sg %s\n' "$*" >> "${TRACE}"
@@ -161,7 +173,8 @@ chmod 600 "${T}/install/.env"
 ACCESS_TOKEN=other-token REGISTRY_HTTP_SECRET=other-http REGISTRY_PASS=other-pass \
     run_bootstrap "${T}/home" "${T}/install" --no-start >/dev/null 2>&1 ||
     fail "bootstrap rerun should succeed"
-[ "$(cat "${T}/install/.env")" = "ACCESS_TOKEN=keep-me" ] || fail "rerun must not overwrite .env"
+grep -q '^ACCESS_TOKEN=keep-me$' "${T}/install/.env" || fail "rerun must not overwrite .env"
+grep -q '^REGISTRY_PORT=' "${T}/install/.env" || fail "a missing REGISTRY_PORT should be added on rerun"
 grep -q 'git .*fetch' "${T}/trace" || fail "rerun must update the existing checkout"
 echo "PASS: reruns update the checkout and preserve .env"
 
@@ -311,5 +324,33 @@ set -e
 grep -q 'up failed' "${T}/out-fail" || fail "the actual command failure should be reported"
 grep -q 'not accessible' "${T}/out-fail" && fail "must not blame docker access for a command failure"
 echo "PASS: fleet command failures are reported accurately"
+
+# --- A busy registry port is replaced by a free one -------------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-port" "${T}/install-port"
+: > "${T}/trace"
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    SS_BUSY_PORT=5000 run_bootstrap "${T}/home-port" "${T}/install-port" --no-start \
+    >"${T}/out-port" 2>&1 ||
+    {
+        cat "${T}/out-port" >&2
+        fail "bootstrap should pick a free registry port"
+    }
+grep -q '^REGISTRY_PORT=5001$' "${T}/install-port/.env" || fail "a free registry port must be recorded in .env"
+grep -qi 'busy' "${T}/out-port" || fail "the port change should be reported"
+echo "PASS: a busy registry port is replaced by a free one"
+
+# --- An explicitly requested busy port fails --------------------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-portbusy" "${T}/install-portbusy"
+set +e
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    REGISTRY_PORT=5000 SS_BUSY_PORT=5000 run_bootstrap "${T}/home-portbusy" "${T}/install-portbusy" \
+    --no-start >"${T}/out-portbusy" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "an explicitly requested busy port must fail"
+grep -q 'REGISTRY_PORT=5000' "${T}/out-portbusy" || fail "the error should name REGISTRY_PORT"
+echo "PASS: an explicitly requested busy port fails clearly"
 
 echo "bootstrap spec tests: PASS"

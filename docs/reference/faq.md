@@ -42,4 +42,22 @@ failure. A SIGKILL can leave `.fleet-build/` behind; remove it manually.
 
 **Does the private registry need to be reachable from outside?**
 
-No. Runners reach it over the host network. Only other machines that pull your images need access.
+No. Runners reach it as `registry:5000` over the internal Compose network. Only other machines that
+pull your images need access.
+
+**Does the private registry need a public domain name?**
+
+No — not for the fleet. Runner containers reach the registry as `registry:5000` over the internal
+Compose network, independent of any host port or DNS. The host port (`REGISTRY_PORT`, default 5000)
+exists only for consumers **outside** the fleet:
+
+- Other processes on the host use `localhost:<port>`.
+- Remote machines need the host's IP or hostname plus either TLS or `insecure-registries` in their
+  Docker daemon configuration.
+- A domain name (with a certificate or reverse proxy) is only needed to expose the registry under a
+  stable HTTPS name, like `registry.example.com`.
+
+If port 5000 is already taken, set `REGISTRY_PORT` to a free port in `.env`; `bootstrap.sh` does
+this automatically on a fresh install. If another registry already runs on the host and you prefer
+it, remove the `registry` service from `docker-compose.yml` and point your workflows at that
+registry instead.

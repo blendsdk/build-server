@@ -74,6 +74,19 @@ REG_SECRET="$(jq -r '.services.registry.environment.REGISTRY_HTTP_SECRET' "${MOD
 OTHER_SECRETS="$(jq '[.services | to_entries[] | select(.key != "registry") | select(.value.environment.REGISTRY_HTTP_SECRET != null)] | length' "${MODEL}")"
 [ "${OTHER_SECRETS}" -eq 0 ] || fail "only the registry service may receive REGISTRY_HTTP_SECRET"
 
+# The registry host port is configurable; runners use registry:5000 regardless.
+DEFAULT_PORT="$(jq -r '.services.registry.ports[0].published' "${MODEL}")"
+[ "${DEFAULT_PORT}" = "5000" ] || fail "default registry host port must be 5000"
+REGISTRY_PORT=5050 ACCESS_TOKEN=dummy-token REGISTRY_HTTP_SECRET=dummy-secret \
+    docker compose -f docker-compose.yml -f docker-compose.generated.yml config --format json \
+    >"${T}/model-port.json" 2>"${T}/config-port.err" ||
+    {
+        cat "${T}/config-port.err" >&2
+        fail "compose model with a REGISTRY_PORT override is invalid"
+    }
+CUSTOM_PORT="$(jq -r '.services.registry.ports[0].published' "${T}/model-port.json")"
+[ "${CUSTOM_PORT}" = "5050" ] || fail "REGISTRY_PORT override was not applied (got ${CUSTOM_PORT})"
+
 # Exactly one organization opts into the host /tmp mount.
 BUILD_TEMP_COUNT="$(jq '[.services | to_entries[] | select([.value.volumes[]?.target] | index("/build-temp"))] | length' "${MODEL}")"
 [ "${BUILD_TEMP_COUNT}" -eq 1 ] || fail "exactly one service must mount /build-temp, got ${BUILD_TEMP_COUNT}"

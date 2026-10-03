@@ -15,6 +15,7 @@ Common causes:
 | `context ... has no Dockerfile` | Bad `context=` in `orgs.conf` | Fix the path; see [Organizations](/guide/organizations) |
 | `already exists; remove the leftover staging directory` | A killed build left `.fleet-build/` or `./ssh` | `rm -rf .fleet-build ./ssh` and rebuild |
 | `image 'runner-image-<slug>' is missing` or `pull access denied for runner-image-<slug>` | The custom-context image was never built; it is local-only and never pulled | `./fleet.sh build <org>` (or `./fleet.sh update-runners`), then `./fleet.sh up` |
+| `Bind for 0.0.0.0:5000 failed: port is already allocated` | Another service on the host already uses the registry's host port | Set `REGISTRY_PORT=<free port>` in `.env` and rerun `./fleet.sh up`; a fresh `bootstrap.sh` install picks a free port automatically |
 
 ## Jobs cannot reach the registry
 

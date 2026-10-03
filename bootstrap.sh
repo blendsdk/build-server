@@ -269,6 +269,34 @@ configure_orgs() {
     say "wrote orgs.conf with: ${ORGS}"
 }
 
+# True when something is already listening on the given TCP port.
+port_in_use() {
+    local port="$1"
+    command -v ss >/dev/null 2>&1 || return 1
+    ss -H -ltn "sport = :${port}" 2>/dev/null | grep -q .
+}
+
+# Host port for the registry: the configured one when free, otherwise the first free port in
+# 5000-5050. An explicitly configured busy port is an error.
+choose_registry_port() {
+    local port="${REGISTRY_PORT:-5000}" candidate
+    if ! port_in_use "${port}"; then
+        printf '%s' "${port}"
+        return
+    fi
+    if [ -n "${REGISTRY_PORT:-}" ]; then
+        die "REGISTRY_PORT=${REGISTRY_PORT} is already in use"
+    fi
+    for candidate in $(seq 5001 5050); do
+        if ! port_in_use "${candidate}"; then
+            say "host port 5000 is busy; using ${candidate} for the registry" >&2
+            printf '%s' "${candidate}"
+            return
+        fi
+    done
+    die "no free registry port found in 5000-5050"
+}
+
 # --- prerequisites -----------------------------------------------------------
 install_pkg git git
 install_pkg curl curl
@@ -340,13 +368,19 @@ configure_orgs
 
 # --- host configuration ---------------------------------------------------------
 if [ ! -f .env ]; then
+    REGISTRY_PORT_SELECTED="$(choose_registry_port)"
     umask 077
-    printf 'ACCESS_TOKEN=%s\nREGISTRY_HTTP_SECRET=%s\n' \
-        "${ACCESS_TOKEN}" "${REGISTRY_HTTP_SECRET}" >.env
+    printf 'ACCESS_TOKEN=%s\nREGISTRY_HTTP_SECRET=%s\nREGISTRY_PORT=%s\n' \
+        "${ACCESS_TOKEN}" "${REGISTRY_HTTP_SECRET}" "${REGISTRY_PORT_SELECTED}" >.env
     chmod 600 .env
     say "wrote .env"
 else
     say ".env already exists; leaving it untouched"
+    if ! grep -q '^REGISTRY_PORT=' .env; then
+        REGISTRY_PORT_SELECTED="$(choose_registry_port)"
+        printf 'REGISTRY_PORT=%s\n' "${REGISTRY_PORT_SELECTED}" >>.env
+        say "added REGISTRY_PORT=${REGISTRY_PORT_SELECTED} to .env"
+    fi
 fi
 
 for file in .npmrc .yarnrc .bunfig.toml; do

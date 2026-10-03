@@ -29,6 +29,7 @@
 | `ACCESS_TOKEN` | bootstrap, start.sh, update-runners | GitHub token with runner admin for the configured organizations — see [GitHub token](/guide/github-token) |
 | `REGISTRY_USER` / `REGISTRY_PASS` | bootstrap, htpasswd | Registry credentials |
 | `REGISTRY_HTTP_SECRET` | registry service | Registry signing secret |
+| `REGISTRY_PORT` | registry service | Host port for the registry (default 5000); runners use `registry:5000` inside the fleet |
 | `RUNNER_EMAIL_DOMAIN` | start.sh | Domain for the runner's git identity email (default `users.noreply.github.com`) |
 | `INSTALL_DIR`, `REPO_URL`, `BRANCH` | bootstrap | Checkout location and source |
 | `GIT_AUTH`, `SSH_KEY`, `REPO_SSH_URL` | bootstrap | Checkout auth mode (`token`/`ssh`), key path, and explicit SSH URL — see [Getting started](/guide/getting-started#repository-access) |
