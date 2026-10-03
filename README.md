@@ -29,7 +29,8 @@ On a fresh Ubuntu host:
 curl -fsSL https://raw.githubusercontent.com/blendsdk/build-server/main/bootstrap.sh | bash -s --
 ```
 
-Or manually:
+Add `--ssh` to clone with your existing SSH key, or `--generate-ssh-key` to create and register a
+new one. Or manually:
 
 ```bash
 git clone https://github.com/blendsdk/build-server.git

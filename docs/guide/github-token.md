@@ -60,6 +60,19 @@ curl -fsS -X POST -H "Authorization: token $ACCESS_TOKEN" \
 A JSON body with a `token` field means the fleet can register runners for that organization.
 `404` usually means the token cannot see the organization; `401` means it is invalid or expired.
 
+## Cloning over SSH instead
+
+`ACCESS_TOKEN` mints runner registration tokens, but the repository checkout can use SSH:
+
+```bash
+bash bootstrap.sh --ssh                 # reuse ~/.ssh/id_rsa
+bash bootstrap.sh --generate-ssh-key    # create a key and install it on GitHub
+```
+
+To let the installer upload the new public key, the token also needs the classic
+`write:public_key` scope (fine-grained: **Git SSH keys: Read and write**). Without it, the
+installer prints the public key and the URL to add it manually.
+
 ## Expiry and rotation
 
 - Registration tokens are minted each time a runner container starts, so an expired `ACCESS_TOKEN`
