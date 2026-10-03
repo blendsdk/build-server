@@ -49,6 +49,11 @@ token — the same permission the fleet needs. It then writes `orgs.conf`, build
 **and every custom-context image**, and starts the fleet. If host port 5000 is already taken, it
 selects the next free port for the registry and records it as `REGISTRY_PORT` in `.env`.
 
+Re-running the installer is safe and self-healing: it reuses values already in `.env`, regenerates
+`registry/auth/registry.password` whenever the credentials no longer match, and records any missing
+registry keys. Existing installs that predate the registry-credential support are repaired by a
+single re-run.
+
 ## Repository access
 
 The private repository can be cloned with the token or with SSH:

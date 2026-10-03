@@ -43,7 +43,7 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-https://github.com/blendsdk/build-server.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/build-server}"
-REGISTRY_USER="${REGISTRY_USER:-ci}"
+REGISTRY_USER="${REGISTRY_USER:-}"
 GIT_AUTH="${GIT_AUTH:-token}"
 GENERATE_SSH_KEY=0
 SSH_KEY="${SSH_KEY:-${HOME}/.ssh/id_rsa}"
@@ -102,6 +102,16 @@ say() { printf 'bootstrap: %s\n' "$*"; }
 die() {
     printf 'bootstrap: ERROR: %s\n' "$*" >&2
     exit 1
+}
+
+# Read a value from an existing .env without overriding an explicitly provided environment value.
+load_env_var() {
+    local name="$1" value
+    [ -n "${!name:-}" ] && return 0
+    [ -f "${INSTALL_DIR}/.env" ] || return 0
+    value="$(grep -E "^${name}=" "${INSTALL_DIR}/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    [ -n "${value}" ] || return 0
+    printf -v "${name}" '%s' "${value}"
 }
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -312,21 +322,26 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 # --- secrets -----------------------------------------------------------------
+# Reuse values from an existing install so re-runs stay consistent.
+load_env_var ACCESS_TOKEN
+load_env_var REGISTRY_USER
+load_env_var REGISTRY_PASS
+load_env_var REGISTRY_HTTP_SECRET
+load_env_var REGISTRY_PORT
+REGISTRY_USER="${REGISTRY_USER:-ci}"
+
 if [ -z "${ACCESS_TOKEN:-}" ]; then
     prompt_var ACCESS_TOKEN "GitHub token with runner admin on every org in orgs.conf (classic PAT with admin:org - see docs/guide/github-token)" secret
 fi
 [ -n "${ACCESS_TOKEN}" ] || die "ACCESS_TOKEN must not be empty"
 
 if [ -z "${REGISTRY_PASS:-}" ]; then
-    REGISTRY_PASS_EXPLICIT=0
     if [ "${NONINTERACTIVE}" = "1" ] || [ ! -r /dev/tty ]; then
         REGISTRY_PASS="$(random_hex 16)"
         GENERATED_REGISTRY_PASS=1
     else
         prompt_var REGISTRY_PASS "Registry password for user ${REGISTRY_USER}" secret
     fi
-else
-    REGISTRY_PASS_EXPLICIT=1
 fi
 [ -n "${REGISTRY_PASS}" ] || die "REGISTRY_PASS must not be empty"
 REGISTRY_HTTP_SECRET="${REGISTRY_HTTP_SECRET:-$(random_hex 32)}"
@@ -370,13 +385,6 @@ cd "${INSTALL_DIR}"
 configure_orgs
 
 # --- host configuration ---------------------------------------------------------
-# Whether this run knows the password that matches the existing htpasswd file.
-if [ -s registry/auth/registry.password ] && [ "${REGISTRY_PASS_EXPLICIT}" = "0" ]; then
-    REGISTRY_PASS_KNOWN=0
-else
-    REGISTRY_PASS_KNOWN=1
-fi
-
 if [ ! -f .env ]; then
     REGISTRY_PORT_SELECTED="$(choose_registry_port)"
     umask 077
@@ -392,17 +400,17 @@ else
         printf 'REGISTRY_PORT=%s\n' "${REGISTRY_PORT_SELECTED}" >>.env
         say "added REGISTRY_PORT=${REGISTRY_PORT_SELECTED} to .env"
     fi
-    if [ "${REGISTRY_PASS_KNOWN}" = "1" ]; then
-        if ! grep -q '^REGISTRY_USER=' .env; then
-            printf 'REGISTRY_USER=%s\n' "${REGISTRY_USER}" >>.env
-            say "added REGISTRY_USER to .env"
-        fi
-        if ! grep -q '^REGISTRY_PASS=' .env; then
-            printf 'REGISTRY_PASS=%s\n' "${REGISTRY_PASS}" >>.env
-            say "added REGISTRY_PASS to .env"
-        fi
-    else
-        say "the existing registry password is unknown to this run; set REGISTRY_USER/REGISTRY_PASS in .env if jobs publish images"
+    if ! grep -q '^REGISTRY_HTTP_SECRET=' .env; then
+        printf 'REGISTRY_HTTP_SECRET=%s\n' "${REGISTRY_HTTP_SECRET}" >>.env
+        say "added REGISTRY_HTTP_SECRET to .env"
+    fi
+    if ! grep -q '^REGISTRY_USER=' .env; then
+        printf 'REGISTRY_USER=%s\n' "${REGISTRY_USER}" >>.env
+        say "added REGISTRY_USER to .env"
+    fi
+    if ! grep -q '^REGISTRY_PASS=' .env; then
+        printf 'REGISTRY_PASS=%s\n' "${REGISTRY_PASS}" >>.env
+        say "added REGISTRY_PASS to .env"
     fi
 fi
 
@@ -432,7 +440,7 @@ if [ ! -f "${HOME}/.ssh/config" ]; then
 fi
 
 mkdir -p registry/auth registry/data
-if [ ! -s registry/auth/registry.password ] || [ "${REGISTRY_PASS_EXPLICIT}" = "1" ]; then
+if ! htpasswd -vb registry/auth/registry.password "${REGISTRY_USER}" "${REGISTRY_PASS}" >/dev/null 2>&1; then
     htpasswd -Bbn "${REGISTRY_USER}" "${REGISTRY_PASS}" >registry/auth/registry.password
     chmod 600 registry/auth/registry.password
     say "wrote registry/auth/registry.password for user ${REGISTRY_USER}"

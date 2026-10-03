@@ -57,6 +57,12 @@ EOF
     cat > "${bin}/htpasswd" <<'EOF'
 #!/bin/bash
 printf 'htpasswd %s\n' "$*" >> "${TRACE}"
+case "${1:-}" in
+    -vb)
+        [ -s "${2:-}" ] || exit 1
+        exit "${HTPASSWD_VERIFY_EXIT:-0}"
+        ;;
+esac
 printf '%s:$2y$examplehash\n' "${2:-user}"
 exit 0
 EOF
@@ -173,6 +179,7 @@ printf 'ACCESS_TOKEN=keep-me\n' > "${T}/install/.env"
 chmod 600 "${T}/install/.env"
 : > "${T}/trace"
 ACCESS_TOKEN=other-token REGISTRY_HTTP_SECRET=other-http REGISTRY_PASS=other-pass \
+    HTPASSWD_VERIFY_EXIT=1 \
     run_bootstrap "${T}/home" "${T}/install" --no-start >/dev/null 2>&1 ||
     fail "bootstrap rerun should succeed"
 grep -q '^ACCESS_TOKEN=keep-me$' "${T}/install/.env" || fail "rerun must not overwrite .env"
@@ -356,5 +363,52 @@ set -e
 [ "${CODE}" -ne 0 ] || fail "an explicitly requested busy port must fail"
 grep -q 'REGISTRY_PORT=5000' "${T}/out-portbusy" || fail "the error should name REGISTRY_PORT"
 echo "PASS: an explicitly requested busy port fails clearly"
+
+# --- An older install without credentials in .env is repaired --------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-upgrade" "${T}/install-upgrade/.git" "${T}/install-upgrade/registry/auth"
+printf 'ACCESS_TOKEN=old-token\n' > "${T}/install-upgrade/.env"
+# shellcheck disable=SC2016  # a literal bcrypt hash, not a shell expansion
+printf 'stale:$2y$stalehash\n' > "${T}/install-upgrade/registry/auth/registry.password"
+: > "${T}/trace"
+HTPASSWD_VERIFY_EXIT=1 REGISTRY_HTTP_SECRET=secret-http \
+    run_bootstrap "${T}/home-upgrade" "${T}/install-upgrade" --no-start \
+    >"${T}/out-upgrade" 2>&1 ||
+    {
+        cat "${T}/out-upgrade" >&2
+        fail "bootstrap should repair an install without registry credentials"
+    }
+grep -q '^ACCESS_TOKEN=old-token$' "${T}/install-upgrade/.env" || fail "existing token must be preserved"
+grep -q '^REGISTRY_USER=ci$' "${T}/install-upgrade/.env" || fail "missing registry user must be added"
+grep -qE '^REGISTRY_PASS=.+$' "${T}/install-upgrade/.env" || fail "missing registry password must be recorded"
+grep -q -- '-Bbn' "${T}/trace" || fail "the htpasswd file must be regenerated to match"
+grep -qi 'unknown' "${T}/out-upgrade" && fail "the repair must not leave an unknown-password warning"
+echo "PASS: an older install without registry credentials is repaired"
+
+# --- A complete, matching installation is left untouched --------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-match" "${T}/install-match/.git" "${T}/install-match/registry/auth"
+cat > "${T}/install-match/.env" <<'EOF'
+ACCESS_TOKEN=keep-token
+REGISTRY_USER=ci
+REGISTRY_PASS=keep-pass
+REGISTRY_HTTP_SECRET=keep-http
+REGISTRY_PORT=5002
+EOF
+# shellcheck disable=SC2016  # a literal bcrypt hash, not a shell expansion
+printf 'ci:$2y$goodhash\n' > "${T}/install-match/registry/auth/registry.password"
+: > "${T}/trace"
+HTPASSWD_VERIFY_EXIT=0 CURL_HTTP_CODE=201 \
+    run_bootstrap "${T}/home-match" "${T}/install-match" --no-start \
+    >"${T}/out-match" 2>&1 ||
+    {
+        cat "${T}/out-match" >&2
+        fail "bootstrap should succeed on a matching install"
+    }
+grep -q -- '-Bbn' "${T}/trace" && fail "a matching htpasswd must not be regenerated"
+grep -q '^REGISTRY_PASS=keep-pass$' "${T}/install-match/.env" || fail "credentials must be preserved"
+grep -q '^REGISTRY_PORT=5002$' "${T}/install-match/.env" || fail "the recorded port must be preserved"
+grep -q '^ACCESS_TOKEN=keep-token$' "${T}/install-match/.env" || fail "the recorded token must be preserved"
+echo "PASS: a complete, matching installation is left untouched"
 
 echo "bootstrap spec tests: PASS"
