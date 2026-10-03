@@ -219,7 +219,9 @@ done
 [ -f "${T}/home/.ssh/config" ] || fail "ssh config not created"
 grep -q -- '--branch main' "${T}/trace" || fail "clone must target the configured branch"
 grep -q 'https://github.com/blendsdk/build-server.git' "${T}/trace" || fail "clone must target the public repository"
-grep -q 'AUTHORIZATION: bearer secret-token' "${T}/trace" || fail "clone must authenticate with the token"
+EXPECTED_AUTH="AUTHORIZATION: Basic $(printf 'x-access-token:secret-token' | base64 -w0)"
+grep -qF "${EXPECTED_AUTH}" "${T}/trace" ||
+    fail "clone must authenticate with the token over HTTP basic auth"
 for file in bootstrap.sh fleet.sh docker-compose.yml Dockerfile start.sh entrypoint.sh work_queue; do
     [ -f "${T}/install/${file}" ] || fail "runtime file ${file} was not installed"
 done
@@ -284,7 +286,7 @@ ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-
     }
 grep -q 'clone --depth 1 --single-branch --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
     fail "SSH mode must clone over git@github.com"
-grep -q 'AUTHORIZATION: bearer' "${T}/trace" && fail "SSH mode must not send the token to git"
+grep -q 'AUTHORIZATION:' "${T}/trace" && fail "SSH mode must not send the token to git"
 [ -f "${T}/install-ssh/.env" ] || fail "SSH mode must still write .env"
 SSH_DEST="$(grep 'git .*clone' "${T}/trace" | tail -1 | awk '{print $NF}')"
 [ "${SSH_DEST}" = "${T}/install-ssh" ] && fail "SSH mode must clone into a temporary directory"

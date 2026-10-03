@@ -396,7 +396,9 @@ if [ "${GIT_AUTH}" = "ssh" ]; then
         die "could not fetch ${ssh_url} (${BRANCH})"
 else
     say "fetching ${REPO_URL} (${BRANCH})"
-    git -c "http.extraHeader=AUTHORIZATION: bearer ${ACCESS_TOKEN}" \
+    # Git over HTTPS authenticates with HTTP basic auth; the token is the password and
+    # "x-access-token" the user name, which works for PATs, OAuth tokens, and app tokens alike.
+    git -c "http.extraHeader=AUTHORIZATION: Basic $(printf 'x-access-token:%s' "${ACCESS_TOKEN}" | base64 -w0)" \
         clone --depth 1 --single-branch --branch "${BRANCH}" "${REPO_URL}" "${CLONE_DIR}" ||
         die "could not fetch ${REPO_URL} (${BRANCH}); check ACCESS_TOKEN and the network"
 fi
