@@ -31,7 +31,7 @@ printf 'git %s\n' "$*" >> "${TRACE}"
 
 populate_fake_repo() {
     dir="$1"
-    mkdir -p "${dir}/.git" "${dir}/test" "${dir}/docs" "${dir}/codeops" \
+    mkdir -p "${dir}/.git" "${dir}/test" "${dir}/docs" "${dir}/codeops" "${dir}/.opencode/skills" \
         "${dir}/node_modules/pkg" "${dir}/examples/runner-custom"
     cat > "${dir}/fleet.sh" <<'FLEET'
 #!/bin/bash
@@ -42,16 +42,19 @@ fi
 exit 0
 FLEET
     chmod +x "${dir}/fleet.sh"
-    for file in bootstrap.sh docker-compose.yml Dockerfile start.sh entrypoint.sh work_queue; do
+    for file in .dockerignore bootstrap.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
         printf 'stub %s\n' "${file}" > "${dir}/${file}"
     done
-    chmod +x "${dir}/bootstrap.sh" "${dir}/start.sh" "${dir}/entrypoint.sh" "${dir}/work_queue"
+    chmod +x "${dir}/bootstrap.sh" "${dir}/start.sh" "${dir}/entrypoint.sh"
     for file in package.json package-lock.json AGENTS.md; do
         printf 'dev\n' > "${dir}/${file}"
     done
     printf 'dev\n' > "${dir}/test/README.md"
     printf 'dev\n' > "${dir}/docs/index.md"
     printf 'dev\n' > "${dir}/codeops/.codeops.yml"
+    printf 'dev\n' > "${dir}/.opencode/skills/example.md"
+    printf 'dev\n' > "${dir}/README.md"
+    printf 'dev\n' > "${dir}/LICENSE"
     printf 'dev\n' > "${dir}/examples/playground.sh"
     printf 'dev\n' > "${dir}/examples/README.md"
     printf 'dev\n' > "${dir}/examples/orgs.conf"
@@ -226,7 +229,7 @@ grep -q 'https://github.com/blendsdk/build-server.git' "${T}/trace" || fail "clo
 EXPECTED_AUTH="AUTHORIZATION: Basic $(printf 'x-access-token:secret-token' | base64 -w0)"
 grep -qF "${EXPECTED_AUTH}" "${T}/trace" ||
     fail "clone must authenticate with the token over HTTP basic auth"
-for file in bootstrap.sh fleet.sh docker-compose.yml Dockerfile start.sh entrypoint.sh work_queue; do
+for file in .dockerignore bootstrap.sh fleet.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
     [ -f "${T}/install/${file}" ] || fail "runtime file ${file} was not installed"
 done
 [ -e "${T}/install/.git" ] && fail "a clean install must not contain .git"
@@ -513,13 +516,16 @@ echo "PASS: legacy checkouts keep development files and print the --slim hint"
 # --- --slim removes development files and keeps state ----------------------------------------
 make_stubs "${T}/bin"
 mkdir -p "${T}/home-slim" "${T}/install-slim/.git" "${T}/install-slim/test" "${T}/install-slim/docs" \
-    "${T}/install-slim/codeops" "${T}/install-slim/node_modules/pkg" "${T}/install-slim/registry/auth" \
-    "${T}/install-slim/ssh" "${T}/install-slim/orgs/acme"
+    "${T}/install-slim/codeops" "${T}/install-slim/.opencode/util" "${T}/install-slim/node_modules/pkg" \
+    "${T}/install-slim/registry/auth" "${T}/install-slim/ssh" "${T}/install-slim/orgs/acme"
 printf 'ACCESS_TOKEN=keep\n' > "${T}/install-slim/.env"
 printf 'AcmeTools\n' > "${T}/install-slim/orgs.conf"
 printf 'dev\n' > "${T}/install-slim/test/README.md"
 printf 'dev\n' > "${T}/install-slim/docs/index.md"
 printf 'dev\n' > "${T}/install-slim/codeops/plan.md"
+printf 'dev\n' > "${T}/install-slim/.opencode/util/chunk.js"
+printf 'dev\n' > "${T}/install-slim/README.md"
+printf 'dev\n' > "${T}/install-slim/LICENSE"
 printf 'dev\n' > "${T}/install-slim/node_modules/pkg/index.js"
 printf 'dev\n' > "${T}/install-slim/package.json"
 printf 'dev\n' > "${T}/install-slim/package-lock.json"
@@ -535,11 +541,11 @@ ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-
         cat "${T}/out-slim" >&2
         fail "--slim should succeed"
     }
-for gone in .git test docs codeops node_modules package.json package-lock.json AGENTS.md; do
+for gone in .git test docs codeops .opencode node_modules package.json package-lock.json AGENTS.md; do
     [ -e "${T}/install-slim/${gone}" ] && fail "--slim must remove ${gone}"
 done
 for kept in .env orgs.conf registry/auth/registry.password ssh/id_rsa orgs/acme/Dockerfile \
-    .build-server-manifest .build-server-version fleet.sh; do
+    .build-server-manifest .build-server-version fleet.sh .dockerignore README.md LICENSE; do
     [ -e "${T}/install-slim/${kept}" ] || fail "--slim must keep ${kept}"
 done
 echo "PASS: --slim removes development files and keeps state"

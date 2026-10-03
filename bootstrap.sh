@@ -366,13 +366,13 @@ REGISTRY_HTTP_SECRET="${REGISTRY_HTTP_SECRET:-$(random_hex 32)}"
 # The repository is fetched into a temporary shallow clone; only the runtime files below are
 # installed. Development material (tests, docs, git metadata) never reaches the install directory.
 INSTALL_FILES=(
+    .dockerignore
     bootstrap.sh
     docker-compose.yml
     Dockerfile
     entrypoint.sh
     fleet.sh
     start.sh
-    work_queue
 )
 
 # Development-only paths removed by --slim from legacy checkouts.
@@ -380,6 +380,7 @@ SLIM_PATHS=(
     .git
     .github
     .gitignore
+    .opencode
     AGENTS.md
     CONTRIBUTING.md
     SECURITY.md

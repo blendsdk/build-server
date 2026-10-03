@@ -14,14 +14,15 @@ explicit `--slim` migration for existing full clones.
 ## Authorized design (user-approved)
 
 - Fetch each run with a shallow clone into `mktemp -d`, reusing the existing token/SSH auth paths.
-- Copy allowlist: `bootstrap.sh`, `fleet.sh`, `docker-compose.yml`, `Dockerfile`, `start.sh`,
-  `entrypoint.sh`, `work_queue` — atomically per file (`.tmp` + `mv`).
+- Copy allowlist: `.dockerignore`, `bootstrap.sh`, `fleet.sh`, `docker-compose.yml`, `Dockerfile`,
+  `start.sh`, `entrypoint.sh` — atomically per file (`.tmp` + `mv`).
 - Write `.build-server-manifest` (copied paths) and `.build-server-version` (`REVISION`, `DATE`).
 - On update, delete old-manifest paths that no longer exist upstream; never touch generated state
   (`.env`, `orgs.conf`, `ssh/`, `registry/`, credentials, `.runner-version`, context dirs).
-- `--slim` prunes the fixed dev list (`.git`, `test/`, `docs/`, `codeops/`, `.github/`,
-  `node_modules/`, `package*.json`, dev-only `examples/` files) with realpath guards; without the
-  flag, refresh and print a hint.
+- `--slim` prunes the fixed dev list (`.git`, `test/`, `docs/`, `codeops/`, `.opencode/`,
+  `.github/`, `node_modules/`, `package*.json`, dev-only `examples/` files) with realpath guards;
+  without the flag, refresh and print a hint. `README.md`, `LICENSE`, and `.env.example` stay as
+  operator references.
 - Drop `shellcheck` from prerequisites; keep `git`.
 - `fleet.sh status` prints `Host version: <sha> (<date>)`.
 
@@ -36,4 +37,4 @@ explicit `--slim` migration for existing full clones.
 - [ ] T-08.7 Fleet E2E: `bash bootstrap.sh --keep-orgs --slim` on the remote host, then smoke workflow
 - [ ] T-08.8 Roadmap bookkeeping and commit
 
-**Verify**: `shellcheck -S style bootstrap.sh fleet.sh entrypoint.sh start.sh work_queue test/*.sh examples/playground.sh && bash test/verify.sh && npm run docs:build`
+**Verify**: `shellcheck -S style bootstrap.sh fleet.sh entrypoint.sh start.sh test/*.sh examples/playground.sh && bash test/verify.sh && npm run docs:build`
