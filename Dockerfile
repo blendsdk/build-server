@@ -8,10 +8,11 @@ SHELL ["/bin/bash", "-c"]
 # Update the base system and create the unprivileged user the runner runs as.
 RUN apt-get update -y && apt-get upgrade -y && useradd -m docker
 
-# Base toolchain, Python, and jq (the runner entrypoint parses JSON with jq).
+# Base toolchain: git backs the runner and actions/checkout, OpenSSH serves the staged keys for
+# private repositories, and jq parses the JSON the runner entrypoint reads.
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    curl jq build-essential libssl-dev libffi-dev python3 python3-venv python3-dev python3-pip mc \
-    liblttng-ust1t64 unzip rsync upx-ucl
+    curl jq git openssh-client build-essential libssl-dev libffi-dev python3 python3-venv \
+    python3-dev python3-pip mc liblttng-ust1t64 unzip rsync upx-ucl
 
 # Browser runtime libraries for the Chrome build that Puppeteer downloads.
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -65,7 +66,7 @@ ENV NVM_DIR=/home/docker/.nvm
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash && \
     . "$NVM_DIR/nvm.sh" && \
     nvm install --lts && \
-    npm install -g npm@latest yarn lerna
+    npm install -g npm@latest yarn pnpm
 
 USER root
 

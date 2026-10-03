@@ -29,4 +29,15 @@ grep -Fq 'upx-ucl' "${DOCKERFILE}" || fail "Dockerfile must install upx-ucl"
 grep -Fq 'get.docker.com' "${DOCKERFILE}" || fail "Dockerfile must install the inner Docker engine"
 grep -Fq 'RUNNER_VERSION="2.337.0"' "${DOCKERFILE}" || fail "Dockerfile must pin runner 2.337.0"
 
+# git runs in start.sh before the runner registers and backs actions/checkout; openssh-client
+# serves the SSH keys staged for private repositories.
+for pkg in git openssh-client; do
+    grep -Eq "(^|[[:space:]])${pkg}([[:space:]]|$)" "${DOCKERFILE}" ||
+        fail "Dockerfile must install ${pkg}"
+done
+
+# Node package managers installed globally: pnpm is used by current projects.
+grep -Eq "(^|[[:space:]])pnpm([[:space:]]|$)" "${DOCKERFILE}" || fail "Dockerfile must install pnpm globally"
+grep -Eq "(^|[[:space:]])lerna([[:space:]]|$)" "${DOCKERFILE}" && fail "lerna must not be installed"
+
 echo "Dockerfile spec tests: PASS"

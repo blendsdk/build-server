@@ -25,3 +25,4 @@
 | T-08 | Minimal production install | — | [slim-install](plans/slim-install/99-execution-plan.md) | Executing | 🔄 | 2026-10-03 | — |
 | T-09 | Project-named containers for multi-install hosts | — | [project-names](plans/project-names/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
 | T-10 | Remove runner registrations on fleet down | — | [down-unregister](plans/down-unregister/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
+| T-11 | Runner image tooling: git, openssh-client, pnpm | — | [runner-image-tools](plans/runner-image-tools/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
