@@ -1,0 +1,25 @@
+# Host-local secrets — never commit
+.env
+.npmrc
+.yarnrc
+.bunfig.toml
+config.json
+ssh/
+npmrc
+yarnrc
+
+# Local working directories
+temp
+registry
+
+# Node
+node_modules
+
+# Generated fleet files and build staging
+docker-compose.generated.yml*
+.runner-version
+.fleet-build/
+
+# Documentation site
+docs/.vitepress/dist
+docs/.vitepress/cache

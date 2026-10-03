@@ -1,0 +1,42 @@
+name: runner fleet smoke test
+
+# Manual end-to-end checks for a deployed self-hosted runner.
+#
+# GitHub only registers workflows under `.github/workflows/`, so copy this file to
+# `.github/workflows/smoke.yml` in the target repository and dispatch it from the Actions tab
+# after deploying the fleet.
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      # A workspace bind mount must see the checked-out files. Before the inner-daemon change this
+      # mounted an empty host directory.
+      - name: Workspace path mapping
+        run: docker run --rm -v "$PWD:/src" alpine sh -c 'test -f /src/README.md && echo path-mapping-ok'
+
+      # A container published inside the runner must be reachable from the same job.
+      - name: Published port reachability
+        run: |
+          docker rm -f smoke-web 2>/dev/null || true
+          docker run -d --rm -p 8080:80 --name smoke-web nginx:alpine
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:8080 >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:8080 >/dev/null
+          docker rm -f smoke-web
+
+      # Job containers must stay inside the runner. The sleeper stays up for a minute so the
+      # operator can run "docker ps" on the host while it is alive; it must NOT appear there.
+      - name: Host isolation check
+        run: |
+          docker rm -f smoke-sleeper 2>/dev/null || true
+          docker run -d --rm --name smoke-sleeper alpine sleep 90
+          echo "On the host, run 'docker ps' now: smoke-sleeper must NOT appear."
+          sleep 60
+          docker rm -f smoke-sleeper

@@ -1,0 +1,19 @@
+# Static compose base: the private registry. Runner services are generated from orgs.conf by
+# fleet.sh into docker-compose.generated.yml and merged with this file.
+services:
+  registry:
+    image: registry:3
+    restart: unless-stopped
+    environment:
+      OTEL_TRACES_EXPORTER: "none"
+      REGISTRY_LOG_LEVEL: "info"
+      REGISTRY_HTTP_SECRET: "${REGISTRY_HTTP_SECRET}"
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/registry.password
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /data
+    volumes:
+      - ./registry/auth:/auth
+      - ./registry/data:/data
+    ports:
+      - 5000:5000
