@@ -58,14 +58,14 @@ S="${T}/valid"
 new_sandbox "${S}"
 cat > "${S}/orgs.conf" <<'EOF'
 # fleet organizations
-LogixControl
+AcmeTools
 
-CodeLabOnline
+Globex
 Foo-Bar
 EOF
 MODEL="$(render_json "${S}")"
 [ "$(jq -r '.services | length' <<<"${MODEL}")" -eq 3 ] || fail "expected three services"
-for pair in "logixcontrol_1:LogixControl" "codelabonline_1:CodeLabOnline" "foobar_1:Foo-Bar"; do
+for pair in "acmetools_1:AcmeTools" "globex_1:Globex" "foobar_1:Foo-Bar"; do
     svc="${pair%%:*}"
     org="${pair#*:}"
     [ "$(jq -r --arg s "${svc}" '.services[$s].environment.ORGANIZATION' <<<"${MODEL}")" = "${org}" ] ||
@@ -81,7 +81,7 @@ S="${T}/urls"
 new_sandbox "${S}"
 cat > "${S}/orgs.conf" <<'EOF'
 PlainOrg
-GheOrg url=https://ghe.example.com:8443/VendersIO
+GheOrg url=https://ghe.example.com:8443/GheCorp
 CaseOrg url=https://GitHub.COM:443/CaseOrg
 EOF
 MODEL="$(render_json "${S}")"
@@ -89,7 +89,7 @@ MODEL="$(render_json "${S}")"
     fail "default GITHUB_URL wrong"
 [ "$(jq -r '.services.plainorg_1.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://api.github.com" ] ||
     fail "default GITHUB_API_URL wrong"
-[ "$(jq -r '.services.gheorg_1.environment.GITHUB_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/VendersIO" ] ||
+[ "$(jq -r '.services.gheorg_1.environment.GITHUB_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/GheCorp" ] ||
     fail "custom GITHUB_URL wrong"
 [ "$(jq -r '.services.gheorg_1.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/api/v3" ] ||
     fail "custom GITHUB_API_URL derivation wrong"
