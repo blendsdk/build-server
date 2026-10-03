@@ -23,18 +23,66 @@ make_stubs() {
     # sudo passes through.
     printf '#!/bin/bash\nexec "$@"\n' > "${bin}/sudo"
 
-    # git records calls; a clone invocation creates the target as a repository.
+    # git records calls; a clone populates the target with a fake repository tree, and
+    # rev-parse reports a fixed revision.
     cat > "${bin}/git" <<'EOF'
 #!/bin/bash
 printf 'git %s\n' "$*" >> "${TRACE}"
+
+populate_fake_repo() {
+    dir="$1"
+    mkdir -p "${dir}/.git" "${dir}/test" "${dir}/docs" "${dir}/codeops" \
+        "${dir}/node_modules/pkg" "${dir}/examples/runner-custom"
+    cat > "${dir}/fleet.sh" <<'FLEET'
+#!/bin/bash
+printf 'fleet %s\n' "$*" >> "${TRACE}"
+if [ "${FAKE_FLEET_FAIL_UP:-0}" = "1" ] && [ "${1:-}" = "up" ]; then
+    exit 1
+fi
+exit 0
+FLEET
+    chmod +x "${dir}/fleet.sh"
+    for file in bootstrap.sh docker-compose.yml Dockerfile start.sh entrypoint.sh work_queue; do
+        printf 'stub %s\n' "${file}" > "${dir}/${file}"
+    done
+    chmod +x "${dir}/bootstrap.sh" "${dir}/start.sh" "${dir}/entrypoint.sh" "${dir}/work_queue"
+    for file in package.json package-lock.json AGENTS.md; do
+        printf 'dev\n' > "${dir}/${file}"
+    done
+    printf 'dev\n' > "${dir}/test/README.md"
+    printf 'dev\n' > "${dir}/docs/index.md"
+    printf 'dev\n' > "${dir}/codeops/.codeops.yml"
+    printf 'dev\n' > "${dir}/examples/playground.sh"
+    printf 'dev\n' > "${dir}/examples/README.md"
+    printf 'dev\n' > "${dir}/examples/orgs.conf"
+    printf 'FROM runner-image\n' > "${dir}/examples/runner-custom/Dockerfile"
+}
+
+if [ "${1:-}" = "-C" ]; then
+    shift 2
+fi
+if [ "${1:-}" = "rev-parse" ]; then
+    printf '%s\n' "${GIT_REVISION:-0123456789abcdef0123456789abcdef01234567}"
+    exit 0
+fi
 is_clone=0
 for arg in "$@"; do
     [ "${arg}" = "clone" ] && is_clone=1
 done
 if [ "${is_clone}" = "1" ]; then
+    [ "${GIT_CLONE_EXIT:-0}" = "0" ] || exit "${GIT_CLONE_EXIT}"
     for last in "$@"; do :; done
-    mkdir -p "${last}/.git"
+    populate_fake_repo "${last}"
 fi
+exit 0
+EOF
+
+    # Returns a predictable temporary directory so tests can assert cleanup.
+    cat > "${bin}/mktemp" <<'EOF'
+#!/bin/bash
+dir="${MKTEMP_TARGET:-/tmp/bootstrap-mktemp-stub}"
+mkdir -p "${dir}"
+printf '%s' "${dir}"
 exit 0
 EOF
 
@@ -172,7 +220,19 @@ done
 grep -q -- '--branch main' "${T}/trace" || fail "clone must target the configured branch"
 grep -q 'https://github.com/blendsdk/build-server.git' "${T}/trace" || fail "clone must target the public repository"
 grep -q 'AUTHORIZATION: bearer secret-token' "${T}/trace" || fail "clone must authenticate with the token"
-echo "PASS: full setup creates configuration, credentials, keys, and htpasswd"
+for file in bootstrap.sh fleet.sh docker-compose.yml Dockerfile start.sh entrypoint.sh work_queue; do
+    [ -f "${T}/install/${file}" ] || fail "runtime file ${file} was not installed"
+done
+[ -e "${T}/install/.git" ] && fail "a clean install must not contain .git"
+[ -d "${T}/install/test" ] && fail "a clean install must not contain the test tree"
+[ -d "${T}/install/docs" ] && fail "a clean install must not contain the docs tree"
+[ -f "${T}/install/.build-server-manifest" ] || fail "the install manifest was not written"
+grep -qx 'fleet.sh' "${T}/install/.build-server-manifest" || fail "the manifest must list the runtime files"
+grep -q '^REVISION=0123456789abcdef0123456789abcdef01234567$' "${T}/install/.build-server-version" ||
+    fail "the installed revision was not recorded"
+CLONE_DEST="$(grep 'git .*clone' "${T}/trace" | tail -1 | awk '{print $NF}')"
+[ "${CLONE_DEST}" = "${T}/install" ] && fail "the clone must not target the install directory"
+echo "PASS: full setup installs only the runtime files, credentials, keys, and htpasswd"
 
 # --- Reruns are idempotent and preserve .env -------------------------------------------------
 printf 'ACCESS_TOKEN=keep-me\n' > "${T}/install/.env"
@@ -186,18 +246,12 @@ grep -q '^ACCESS_TOKEN=keep-me$' "${T}/install/.env" || fail "rerun must not ove
 grep -q '^REGISTRY_PORT=' "${T}/install/.env" || fail "a missing REGISTRY_PORT should be added on rerun"
 grep -q '^REGISTRY_USER=ci$' "${T}/install/.env" || fail "missing registry user should be added on rerun"
 grep -q '^REGISTRY_PASS=other-pass$' "${T}/install/.env" || fail "an explicit registry password should be recorded on rerun"
-grep -q 'git .*fetch' "${T}/trace" || fail "rerun must update the existing checkout"
-echo "PASS: reruns update the checkout and preserve .env"
+grep -q 'git .*clone' "${T}/trace" || fail "rerun must refresh the runtime files from a temporary clone"
+echo "PASS: reruns refresh the runtime files and preserve .env"
 
 # --- Start path builds and starts the fleet --------------------------------------------------
 make_stubs "${T}/bin"
-mkdir -p "${T}/home2" "${T}/install2/.git"
-cat > "${T}/install2/fleet.sh" <<'EOF'
-#!/bin/bash
-printf 'fleet %s\n' "$*" >> "${TRACE}"
-exit 0
-EOF
-chmod +x "${T}/install2/fleet.sh"
+mkdir -p "${T}/home2" "${T}/install2"
 : > "${T}/trace"
 ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
     run_bootstrap "${T}/home2" "${T}/install2" >/dev/null 2>&1 ||
@@ -228,10 +282,12 @@ ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-
         cat "${T}/out-ssh" >&2
         fail "SSH bootstrap should succeed with an existing key"
     }
-grep -q 'git clone --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
+grep -q 'clone --depth 1 --single-branch --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
     fail "SSH mode must clone over git@github.com"
 grep -q 'AUTHORIZATION: bearer' "${T}/trace" && fail "SSH mode must not send the token to git"
 [ -f "${T}/install-ssh/.env" ] || fail "SSH mode must still write .env"
+SSH_DEST="$(grep 'git .*clone' "${T}/trace" | tail -1 | awk '{print $NF}')"
+[ "${SSH_DEST}" = "${T}/install-ssh" ] && fail "SSH mode must clone into a temporary directory"
 echo "PASS: SSH clone with an existing key"
 
 # --- Generate and install a new SSH key ------------------------------------------------------
@@ -248,7 +304,7 @@ ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-
 grep -q 'ssh-keygen' "${T}/trace" || fail "a new key must be generated"
 grep -q '/user/keys' "${T}/trace" || fail "the public key must be installed via the API"
 grep -qi 'installed the SSH public key' "${T}/out-genkey" || fail "success message missing"
-grep -q 'git clone --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
+grep -q 'clone --depth 1 --single-branch --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
     fail "generated-key mode must clone over git@github.com"
 [ -f "${T}/home-gen/.ssh/id_rsa" ] || fail "generated key missing"
 echo "PASS: generate and install a new SSH key"
@@ -295,14 +351,8 @@ echo "PASS: unknown organizations fail validation"
 
 # --- Custom-context images are built before starting -----------------------------------------
 make_stubs "${T}/bin"
-mkdir -p "${T}/home-ctx" "${T}/install-ctx/.git"
+mkdir -p "${T}/home-ctx" "${T}/install-ctx"
 printf 'RegisteredOrg\nInitech context=examples/runner-custom\n' > "${T}/install-ctx/orgs.conf"
-cat > "${T}/install-ctx/fleet.sh" <<'EOF'
-#!/bin/bash
-printf 'fleet %s\n' "$*" >> "${TRACE}"
-exit 0
-EOF
-chmod +x "${T}/install-ctx/fleet.sh"
 : > "${T}/trace"
 ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
     run_bootstrap "${T}/home-ctx" "${T}/install-ctx" --keep-orgs >"${T}/out-ctx" 2>&1 ||
@@ -317,17 +367,11 @@ echo "PASS: custom-context images are built before starting"
 
 # --- A fleet failure is reported as such, not as a docker-access problem ---------------------
 make_stubs "${T}/bin"
-mkdir -p "${T}/home-fail" "${T}/install-fail/.git"
-cat > "${T}/install-fail/fleet.sh" <<'EOF'
-#!/bin/bash
-printf 'fleet %s\n' "$*" >> "${TRACE}"
-if [ "${1:-}" = "up" ]; then exit 1; fi
-exit 0
-EOF
-chmod +x "${T}/install-fail/fleet.sh"
+mkdir -p "${T}/home-fail" "${T}/install-fail"
 : > "${T}/trace"
 set +e
 ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    FAKE_FLEET_FAIL_UP=1 \
     run_bootstrap "${T}/home-fail" "${T}/install-fail" >"${T}/out-fail" 2>&1
 CODE=$?
 set -e
@@ -410,5 +454,102 @@ grep -q '^REGISTRY_PASS=keep-pass$' "${T}/install-match/.env" || fail "credentia
 grep -q '^REGISTRY_PORT=5002$' "${T}/install-match/.env" || fail "the recorded port must be preserved"
 grep -q '^ACCESS_TOKEN=keep-token$' "${T}/install-match/.env" || fail "the recorded token must be preserved"
 echo "PASS: a complete, matching installation is left untouched"
+
+# --- Updates refresh the runtime files, keep state, and remove vanished files -----------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-upd" "${T}/install-upd/registry/auth" "${T}/install-upd/ssh" \
+    "${T}/install-upd/orgs/acme"
+printf 'ACCESS_TOKEN=keep-me\n' > "${T}/install-upd/.env"
+printf 'AcmeTools\n' > "${T}/install-upd/orgs.conf"
+printf 'old\n' > "${T}/install-upd/old-file.sh"
+printf 'fleet.sh\nold-file.sh\n' > "${T}/install-upd/.build-server-manifest"
+printf 'hash\n' > "${T}/install-upd/registry/auth/registry.password"
+printf 'key\n' > "${T}/install-upd/ssh/id_rsa"
+printf 'FROM runner-image\n' > "${T}/install-upd/orgs/acme/Dockerfile"
+: > "${T}/trace"
+ACCESS_TOKEN=other-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-upd" "${T}/install-upd" --no-start --keep-orgs \
+    >"${T}/out-upd" 2>&1 ||
+    {
+        cat "${T}/out-upd" >&2
+        fail "an update should succeed"
+    }
+[ -e "${T}/install-upd/old-file.sh" ] && fail "a file absent upstream must be removed on update"
+[ -f "${T}/install-upd/fleet.sh" ] || fail "runtime files must be refreshed on update"
+grep -q '^ACCESS_TOKEN=keep-me$' "${T}/install-upd/.env" || fail "the update must keep the recorded token"
+grep -q '^AcmeTools$' "${T}/install-upd/orgs.conf" || fail "the update must keep orgs.conf"
+[ -f "${T}/install-upd/registry/auth/registry.password" ] || fail "the update must keep registry state"
+[ -f "${T}/install-upd/ssh/id_rsa" ] || fail "the update must keep the staged SSH material"
+[ -f "${T}/install-upd/orgs/acme/Dockerfile" ] || fail "the update must keep user context directories"
+grep -qx 'old-file.sh' "${T}/install-upd/.build-server-manifest" && fail "the manifest must be rewritten"
+echo "PASS: updates refresh runtime files, keep state, and remove vanished files"
+
+# --- A legacy checkout keeps development files without --slim --------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-legacy" "${T}/install-legacy/.git" "${T}/install-legacy/test" "${T}/install-legacy/docs"
+printf 'dev\n' > "${T}/install-legacy/test/README.md"
+printf 'dev\n' > "${T}/install-legacy/docs/index.md"
+: > "${T}/trace"
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-legacy" "${T}/install-legacy" --no-start --keep-orgs \
+    >"${T}/out-legacy" 2>&1 ||
+    fail "an update of a legacy checkout should succeed"
+[ -d "${T}/install-legacy/.git" ] || fail "without --slim the checkout must be kept"
+[ -d "${T}/install-legacy/test" ] || fail "without --slim the test tree must be kept"
+[ -d "${T}/install-legacy/docs" ] || fail "without --slim the docs tree must be kept"
+grep -q -- '--slim' "${T}/out-legacy" || fail "the hint must mention --slim"
+echo "PASS: legacy checkouts keep development files and print the --slim hint"
+
+# --- --slim removes development files and keeps state ----------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-slim" "${T}/install-slim/.git" "${T}/install-slim/test" "${T}/install-slim/docs" \
+    "${T}/install-slim/codeops" "${T}/install-slim/node_modules/pkg" "${T}/install-slim/registry/auth" \
+    "${T}/install-slim/ssh" "${T}/install-slim/orgs/acme"
+printf 'ACCESS_TOKEN=keep\n' > "${T}/install-slim/.env"
+printf 'AcmeTools\n' > "${T}/install-slim/orgs.conf"
+printf 'dev\n' > "${T}/install-slim/test/README.md"
+printf 'dev\n' > "${T}/install-slim/docs/index.md"
+printf 'dev\n' > "${T}/install-slim/codeops/plan.md"
+printf 'dev\n' > "${T}/install-slim/node_modules/pkg/index.js"
+printf 'dev\n' > "${T}/install-slim/package.json"
+printf 'dev\n' > "${T}/install-slim/package-lock.json"
+printf 'dev\n' > "${T}/install-slim/AGENTS.md"
+printf 'hash\n' > "${T}/install-slim/registry/auth/registry.password"
+printf 'key\n' > "${T}/install-slim/ssh/id_rsa"
+printf 'FROM runner-image\n' > "${T}/install-slim/orgs/acme/Dockerfile"
+: > "${T}/trace"
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-slim" "${T}/install-slim" --no-start --keep-orgs --slim \
+    >"${T}/out-slim" 2>&1 ||
+    {
+        cat "${T}/out-slim" >&2
+        fail "--slim should succeed"
+    }
+for gone in .git test docs codeops node_modules package.json package-lock.json AGENTS.md; do
+    [ -e "${T}/install-slim/${gone}" ] && fail "--slim must remove ${gone}"
+done
+for kept in .env orgs.conf registry/auth/registry.password ssh/id_rsa orgs/acme/Dockerfile \
+    .build-server-manifest .build-server-version fleet.sh; do
+    [ -e "${T}/install-slim/${kept}" ] || fail "--slim must keep ${kept}"
+done
+echo "PASS: --slim removes development files and keeps state"
+
+# --- A failed fetch is reported and the temporary clone is removed ---------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-cfail"
+: > "${T}/trace"
+set +e
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    GIT_CLONE_EXIT=1 MKTEMP_TARGET="${T}/tmp-clone" HOME="${T}/home-cfail" \
+    INSTALL_DIR="${T}/install-cfail" TRACE="${T}/trace" ORGS=ExampleOrg CURL_HTTP_CODE=201 \
+    PATH="${T}/bin:${PATH}" bash "${ROOT}/bootstrap.sh" --non-interactive --no-start \
+    >"${T}/out-cfail" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "a failed fetch must fail the installer"
+grep -qi 'could not fetch' "${T}/out-cfail" || fail "the fetch error should be reported"
+[ -e "${T}/tmp-clone" ] && fail "the temporary clone must be removed after a failure"
+[ -f "${T}/install-cfail/.build-server-manifest" ] && fail "nothing must be installed after a failed fetch"
+echo "PASS: a failed fetch is reported and cleaned up"
 
 echo "bootstrap spec tests: PASS"

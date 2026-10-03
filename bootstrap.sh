@@ -1,13 +1,14 @@
 #!/bin/bash
 # Fresh-host installer for the build server.
 #
-# On an empty Ubuntu host this script installs the prerequisites, clones or updates the
-# repository, collects the required secrets, creates the host credential and SSH material,
-# generates the registry htpasswd, builds the runner image, and starts the fleet.
+# On an empty Ubuntu host this script installs the prerequisites, fetches the repository into a
+# temporary shallow clone, installs the runtime files, collects the required secrets, creates the
+# host credential and SSH material, generates the registry htpasswd, builds the runner image, and
+# starts the fleet. Development material (tests, docs, git metadata) is never installed.
 #
 # Usage:
 #   curl -fsSL <raw bootstrap.sh url> | bash -s -- [--no-start] [--non-interactive]
-#   ... [--ssh | --generate-ssh-key | --token] [--orgs "OrgA OrgB"] [--keep-orgs]
+#   ... [--ssh | --generate-ssh-key | --token] [--orgs "OrgA OrgB"] [--keep-orgs] [--slim]
 #
 # Organizations:
 #   bootstrap asks for the organizations to serve and verifies each by minting a registration
@@ -31,8 +32,8 @@
 #   REGISTRY_USER           registry user (default: ci)
 #   REGISTRY_PASS           registry password (generated and reported when absent)
 #   REGISTRY_HTTP_SECRET    registry signing secret (generated when absent)
-#   INSTALL_DIR             checkout location (default: $HOME/build-server)
-#   REPO_URL                repository to clone (default: the project repository)
+#   INSTALL_DIR             install location (default: $HOME/build-server)
+#   REPO_URL                repository to fetch (default: the project repository)
 #   REPO_SSH_URL            explicit SSH URL when it differs from the REPO_URL derivation
 #   BRANCH                  branch to check out (default: main)
 #   GIT_AUTH                token (default) or ssh; flags win over the variable
@@ -50,22 +51,24 @@ SSH_KEY="${SSH_KEY:-${HOME}/.ssh/id_rsa}"
 REPO_SSH_URL="${REPO_SSH_URL:-}"
 ORGS="${ORGS:-}"
 KEEP_ORGS=0
+SLIM=0
 START=1
 NONINTERACTIVE=0
 
 usage() {
     cat <<'EOF'
 Usage: bootstrap.sh [--no-start] [--non-interactive] [--token | --ssh | --generate-ssh-key]
-                    [--orgs "OrgA OrgB"] [--keep-orgs]
+                    [--orgs "OrgA OrgB"] [--keep-orgs] [--slim]
 
   --no-start         install and configure only; do not build or start the fleet
   --non-interactive  never prompt; required values must come from the environment
-  --token            clone over HTTPS using ACCESS_TOKEN (default)
-  --ssh              clone over SSH using an existing key (SSH_KEY)
+  --token            fetch over HTTPS using ACCESS_TOKEN (default)
+  --ssh              fetch over SSH using an existing key (SSH_KEY)
   --generate-ssh-key generate SSH_KEY when missing, install the public key on GitHub,
-                     then clone over SSH
+                     then fetch over SSH
   --orgs "A B"       organizations to serve; each is verified against GitHub
   --keep-orgs        keep the existing orgs.conf and skip the organization prompt
+  --slim             remove .git and development files from a legacy checkout
 EOF
 }
 
@@ -85,6 +88,7 @@ while [ "$#" -gt 0 ]; do
             shift
             ;;
         --keep-orgs) KEEP_ORGS=1 ;;
+        --slim) SLIM=1 ;;
         -h | --help)
             usage
             exit 0
@@ -311,7 +315,6 @@ choose_registry_port() {
 install_pkg git git
 install_pkg curl curl
 install_pkg jq jq
-install_pkg shellcheck shellcheck
 install_pkg ssh-keygen openssh-client
 install_pkg htpasswd apache2-utils
 
@@ -346,39 +349,109 @@ fi
 [ -n "${REGISTRY_PASS}" ] || die "REGISTRY_PASS must not be empty"
 REGISTRY_HTTP_SECRET="${REGISTRY_HTTP_SECRET:-$(random_hex 32)}"
 
-# --- checkout ------------------------------------------------------------------
+# --- fetch and install ----------------------------------------------------------
+# The repository is fetched into a temporary shallow clone; only the runtime files below are
+# installed. Development material (tests, docs, git metadata) never reaches the install directory.
+INSTALL_FILES=(
+    bootstrap.sh
+    docker-compose.yml
+    Dockerfile
+    entrypoint.sh
+    fleet.sh
+    start.sh
+    work_queue
+)
+
+# Development-only paths removed by --slim from legacy checkouts.
+SLIM_PATHS=(
+    .git
+    .github
+    .gitignore
+    AGENTS.md
+    CONTRIBUTING.md
+    SECURITY.md
+    codeops
+    docs
+    examples/README.md
+    examples/orgs.conf
+    examples/playground.sh
+    node_modules
+    package.json
+    package-lock.json
+    test
+)
+
+TMP_DIR="$(mktemp -d)"
+cleanup_tmp() { rm -rf "${TMP_DIR}"; }
+trap cleanup_tmp EXIT
+CLONE_DIR="${TMP_DIR}/repo"
+
 if [ "${GIT_AUTH}" = "ssh" ]; then
     ensure_ssh_key
     [ "${GENERATE_SSH_KEY}" = "0" ] || register_ssh_key
     prepare_known_hosts
     ssh_url="${REPO_SSH_URL:-$(to_ssh_url "${REPO_URL}")}"
-    if [ -d "${INSTALL_DIR}/.git" ]; then
-        say "updating ${INSTALL_DIR} over SSH"
-        git -C "${INSTALL_DIR}" remote set-url origin "${ssh_url}"
-        git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
-        git -C "${INSTALL_DIR}" checkout "${BRANCH}"
-        git -C "${INSTALL_DIR}" merge --ff-only "origin/${BRANCH}"
-    else
-        say "cloning ${ssh_url} (${BRANCH}) into ${INSTALL_DIR}"
-        mkdir -p "$(dirname "${INSTALL_DIR}")"
-        git clone --branch "${BRANCH}" "${ssh_url}" "${INSTALL_DIR}"
-    fi
+    say "fetching ${ssh_url} (${BRANCH})"
+    git clone --depth 1 --single-branch --branch "${BRANCH}" "${ssh_url}" "${CLONE_DIR}" ||
+        die "could not fetch ${ssh_url} (${BRANCH})"
 else
-    if [ -d "${INSTALL_DIR}/.git" ]; then
-        say "updating ${INSTALL_DIR}"
-        git -C "${INSTALL_DIR}" -c "http.extraHeader=AUTHORIZATION: bearer ${ACCESS_TOKEN}" \
-            fetch origin "${BRANCH}"
-        git -C "${INSTALL_DIR}" checkout "${BRANCH}"
-        git -C "${INSTALL_DIR}" -c "http.extraHeader=AUTHORIZATION: bearer ${ACCESS_TOKEN}" \
-            merge --ff-only "origin/${BRANCH}"
-    else
-        say "cloning ${REPO_URL} (${BRANCH}) into ${INSTALL_DIR}"
-        mkdir -p "$(dirname "${INSTALL_DIR}")"
-        git -c "http.extraHeader=AUTHORIZATION: bearer ${ACCESS_TOKEN}" \
-            clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
-        git -C "${INSTALL_DIR}" remote set-url origin "${REPO_URL}"
-    fi
+    say "fetching ${REPO_URL} (${BRANCH})"
+    git -c "http.extraHeader=AUTHORIZATION: bearer ${ACCESS_TOKEN}" \
+        clone --depth 1 --single-branch --branch "${BRANCH}" "${REPO_URL}" "${CLONE_DIR}" ||
+        die "could not fetch ${REPO_URL} (${BRANCH}); check ACCESS_TOKEN and the network"
 fi
+REVISION="$(git -C "${CLONE_DIR}" rev-parse HEAD)"
+[ -n "${REVISION}" ] || die "could not determine the installed revision"
+
+mkdir -p "${INSTALL_DIR}"
+MANIFEST="${INSTALL_DIR}/.build-server-manifest"
+VERSION_FILE="${INSTALL_DIR}/.build-server-version"
+
+OLD_MANIFEST=()
+if [ -f "${MANIFEST}" ]; then
+    mapfile -t OLD_MANIFEST <"${MANIFEST}"
+fi
+
+# Install the runtime files atomically and record what this run installed.
+NEW_MANIFEST="${TMP_DIR}/manifest"
+: >"${NEW_MANIFEST}"
+for file in "${INSTALL_FILES[@]}"; do
+    [ -f "${CLONE_DIR}/${file}" ] || die "the repository is missing the runtime file '${file}'"
+    cp -p "${CLONE_DIR}/${file}" "${INSTALL_DIR}/${file}.new"
+    mv -f "${INSTALL_DIR}/${file}.new" "${INSTALL_DIR}/${file}"
+    printf '%s\n' "${file}" >>"${NEW_MANIFEST}"
+done
+
+# Remove files installed by a previous run that no longer exist upstream. User files are never
+# listed in the manifest, so they are never candidates.
+for file in "${OLD_MANIFEST[@]}"; do
+    [ -n "${file}" ] || continue
+    grep -qxF "${file}" "${NEW_MANIFEST}" && continue
+    case "${file}" in
+        /* | *..*) continue ;;
+    esac
+    target="${INSTALL_DIR}/${file}"
+    [ -e "${target}" ] || continue
+    rm -f "${target}"
+    say "removed ${file} (no longer part of the install)"
+done
+cp -p "${NEW_MANIFEST}" "${MANIFEST}.new"
+mv -f "${MANIFEST}.new" "${MANIFEST}"
+printf 'REVISION=%s\nDATE=%s\n' "${REVISION}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${VERSION_FILE}"
+say "installed revision ${REVISION}"
+
+# A legacy checkout keeps its development files until --slim is requested.
+if [ "${SLIM}" = "1" ]; then
+    for file in "${SLIM_PATHS[@]}"; do
+        target="${INSTALL_DIR}/${file}"
+        [ -e "${target}" ] || [ -L "${target}" ] || continue
+        rm -rf "${target}"
+        say "removed ${file}"
+    done
+elif [ -d "${INSTALL_DIR}/.git" ]; then
+    say "development checkout detected; re-run with --slim to remove .git and development files"
+fi
+
 cd "${INSTALL_DIR}"
 
 # --- organizations -----------------------------------------------------------------

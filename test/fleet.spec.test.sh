@@ -205,6 +205,15 @@ for expected in "Alpha" "alpha_1" "beta_1" "runner-image-beta" "Runner version: 
 done
 echo "PASS: status reports the fleet and the pinned version"
 
+# --- status reports the installed host revision ----------------------------------------------
+S="${T}/host-version"
+new_sandbox "${S}"
+printf 'REVISION=abc123\nDATE=2026-10-03T10:00:00Z\n' > "${S}/.build-server-version"
+run_fleet "${S}" status >"${S}/out" 2>&1 || fail "status should succeed with a host version"
+grep -qF 'Host version: abc123 (2026-10-03T10:00:00Z)' "${S}/out" ||
+    fail "status must report the installed revision"
+echo "PASS: status reports the installed host revision"
+
 # --- error paths leave the pinned version untouched ----------------------------------------
 S="${T}/api-fail"
 new_sandbox "${S}"

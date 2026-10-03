@@ -62,7 +62,7 @@ A JSON body with a `token` field means the fleet can register runners for that o
 
 ## Cloning over SSH instead
 
-`ACCESS_TOKEN` mints runner registration tokens, but the repository checkout can use SSH:
+`ACCESS_TOKEN` mints runner registration tokens, but the repository fetch can use SSH:
 
 ```bash
 bash bootstrap.sh --ssh                 # reuse ~/.ssh/id_rsa

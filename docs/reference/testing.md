@@ -1,5 +1,8 @@
 # Testing
 
+The tests below live in the development checkout. A production install made by `bootstrap.sh`
+contains only the runtime files, so `verify.sh` is not part of it.
+
 ## The verify command
 
 ```bash

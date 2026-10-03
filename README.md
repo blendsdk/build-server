@@ -31,9 +31,10 @@ curl -fsSL https://raw.githubusercontent.com/blendsdk/build-server/main/bootstra
 ```
 
 The installer asks for your GitHub token and the organizations to serve (each verified against
-GitHub), builds the runner image plus any custom-context images, and starts the fleet. Add `--ssh`
-to clone with your existing SSH key, or `--generate-ssh-key` to create and register a new one. Or
-manually:
+GitHub), builds the runner image plus any custom-context images, and starts the fleet. It installs
+only the runtime files; tests, docs, and git metadata stay out of the install directory. Add
+`--ssh` to fetch with your existing SSH key, or `--generate-ssh-key` to create and register a new
+one. Re-run the installer any time to update. Or manually:
 
 ```bash
 git clone https://github.com/blendsdk/build-server.git

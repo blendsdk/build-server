@@ -17,7 +17,7 @@ Host
 
 | Component | Role |
 | --- | --- |
-| `bootstrap.sh` | Prepares a fresh host: prerequisites, checkout, secrets, keys, htpasswd, build, start |
+| `bootstrap.sh` | Prepares a fresh host: prerequisites, temporary fetch, runtime files, secrets, keys, htpasswd, build, start |
 | `orgs.conf` | Organization registry: names, GitHub URLs, custom-image contexts, build-temp flag |
 | `fleet.sh` | Renders Compose from `orgs.conf` and runs builds, updates, and lifecycle commands |
 | `docker-compose.yml` | Static base with the private registry |

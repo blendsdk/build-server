@@ -208,6 +208,20 @@ resolved_version() {
     awk -F'"' '/^ARG RUNNER_VERSION=/{print $2; exit}' "${ROOT}/Dockerfile"
 }
 
+# The installed host revision recorded by bootstrap.sh, or "not recorded" for older installs.
+host_version() {
+    local revision="" date=""
+    if [ -f "${ROOT}/.build-server-version" ]; then
+        revision="$(awk -F= '$1 == "REVISION" { print $2; exit }' "${ROOT}/.build-server-version")"
+        date="$(awk -F= '$1 == "DATE" { print $2; exit }' "${ROOT}/.build-server-version")"
+    fi
+    if [ -z "${revision}" ]; then
+        printf 'not recorded'
+        return
+    fi
+    printf '%s (%s)' "${revision}" "${date:-unknown}"
+}
+
 # Print the configured fleet and the pinned runner version.
 print_fleet() {
     printf '%-22s %-26s %-26s %s\n' "SERVICE" "IMAGE" "HOSTNAME" "ORGANIZATION"
@@ -220,6 +234,7 @@ print_fleet() {
         printf '%-22s %-26s %-26s %s\n' "${slug}_1" "${image}" "${slug}_runner_1" "${name}"
     done
     echo "Runner version: $(resolved_version)"
+    echo "Host version: $(host_version)"
 }
 
 CRED_FILES=(.npmrc .yarnrc .bunfig.toml config.json)

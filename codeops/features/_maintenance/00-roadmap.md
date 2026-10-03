@@ -22,3 +22,4 @@
 | T-05 | Inner daemon storage fallback | — | [storage-fallback](plans/storage-fallback/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
 | T-06 | Bootstrap always completes the registry credentials | — | [bootstrap-credentials](plans/bootstrap-credentials/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
 | T-07 | One reusable smoke workflow for release validation | — | [smoke-template](plans/smoke-template/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
+| T-08 | Minimal production install | — | [slim-install](plans/slim-install/99-execution-plan.md) | Executing | 🔄 | 2026-10-03 | — |

@@ -15,15 +15,23 @@ of them **kill running jobs** on the affected runners — schedule them between 
 
 ## Updating the host project
 
+Re-run the installer; it fetches a fresh temporary clone and installs the runtime files:
+
 ```bash
 cd ~/build-server
-git pull
-bash test/verify.sh
-./fleet.sh build          # only when the Dockerfile changed
-./fleet.sh restart
+bash bootstrap.sh --keep-orgs
 ```
 
-`bootstrap.sh` does the same update when re-run.
+Or use the one-liner from [Getting started](/guide/getting-started). `.env`, `orgs.conf`, registry
+data, credentials, SSH material, and user context directories are preserved. The installed revision
+is recorded in `.build-server-version` and shown by `./fleet.sh status`.
+
+A production install contains only the runtime files. If the host still holds an older full
+checkout, add `--slim` once to remove `.git` and the development files:
+
+```bash
+bash bootstrap.sh --keep-orgs --slim
+```
 
 ## Rolling a runner version
 
@@ -47,6 +55,6 @@ The only durable state on the host is:
 
 - `.env`, credential files, and `ssh/` — back these up securely;
 - `registry/data` — the private image registry (optional; rebuildable);
-- `.runner-version` — trivial to recreate.
+- `.runner-version`, `.build-server-version`, `.build-server-manifest` — trivial to recreate.
 
 Runner containers themselves are disposable; their image caches rebuild on demand.

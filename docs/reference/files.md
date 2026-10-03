@@ -2,14 +2,19 @@
 
 ## File map
 
+`bootstrap.sh` installs only the runtime files into the install directory. `test/`, `docs/`,
+`codeops/`, and the other development material exist only in a development checkout.
+
 | Path | Role |
 | --- | --- |
-| `bootstrap.sh` | Fresh-host installer |
+| `bootstrap.sh` | Fresh-host installer (also the update entry point) |
 | `orgs.conf` | Organization registry (source of truth) |
 | `fleet.sh` | Admin CLI |
 | `docker-compose.yml` | Static base: the private registry |
 | `docker-compose.generated.yml` | Generated runner services (gitignored) |
 | `.runner-version` | Pinned Actions runner version (gitignored) |
+| `.build-server-version` | Installed revision recorded by `bootstrap.sh` |
+| `.build-server-manifest` | Files installed by `bootstrap.sh`, used to clean up renames |
 | `.fleet-build/` | Temporary build staging (gitignored) |
 | `Dockerfile` | Runner image |
 | `entrypoint.sh` | Inner daemon startup and runner supervision |
@@ -18,9 +23,9 @@
 | `.env` | Host secrets: `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET` |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json` | Host credentials baked into the image |
 | `ssh/` | Staged by `fleet.sh build` from `~/.ssh` |
-| `examples/` | Offline playground with stub `docker`/`curl` |
-| `test/` | Specification and implementation tests, `smoke-workflow.yml`, `verify.sh` |
-| `docs/` | This VitePress site |
+| `examples/` | Offline playground with stub `docker`/`curl` (development only) |
+| `test/` | Specification and implementation tests, `smoke-workflow.yml`, `verify.sh` (development only) |
+| `docs/` | This VitePress site (development only) |
 
 ## Environment variables
 
@@ -35,8 +40,8 @@
 | `INSECURE_REGISTRIES` | inner Docker daemon | Plain-HTTP registries (default `registry:5000`; empty disables) |
 | `DOCKERD_STORAGE_DRIVER` | inner Docker daemon | Optional storage-driver override (e.g. `vfs`); empty means detect and fall back automatically |
 | `RUNNER_EMAIL_DOMAIN` | start.sh | Domain for the runner's git identity email (default `users.noreply.github.com`) |
-| `INSTALL_DIR`, `REPO_URL`, `BRANCH` | bootstrap | Checkout location and source |
-| `GIT_AUTH`, `SSH_KEY`, `REPO_SSH_URL` | bootstrap | Checkout auth mode (`token`/`ssh`), key path, and explicit SSH URL — see [Getting started](/guide/getting-started#repository-access) |
+| `INSTALL_DIR`, `REPO_URL`, `BRANCH` | bootstrap | Install location and fetch source |
+| `GIT_AUTH`, `SSH_KEY`, `REPO_SSH_URL` | bootstrap | Fetch auth mode (`token`/`ssh`), key path, and explicit SSH URL — see [Getting started](/guide/getting-started#repository-access) |
 | `ORGS` | bootstrap | Space- or comma-separated organizations; validated before `orgs.conf` is written |
 | `ORGANIZATION`, `GITHUB_URL`, `GITHUB_API_URL` | start.sh | Per-runner registration scope (set by the generator) |
 

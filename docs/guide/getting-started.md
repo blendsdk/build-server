@@ -3,7 +3,7 @@
 ## Requirements
 
 - A Linux host (Ubuntu-based recommended) with Docker and the Compose plugin
-- `git`, `curl`, `jq`, `shellcheck`, and `htpasswd` (the bootstrap installs them when missing)
+- `git`, `curl`, `jq`, and `htpasswd` (the bootstrap installs them when missing)
 - A GitHub token that can manage runners for every organization in `orgs.conf` — see
   [GitHub token](/guide/github-token) for how to create one (classic PAT with `admin:org`, or a
   fine-grained token for a single organization)
@@ -16,10 +16,11 @@ On a fresh Ubuntu host:
 curl -fsSL https://raw.githubusercontent.com/blendsdk/build-server/main/bootstrap.sh | bash -s --
 ```
 
-The installer installs prerequisites, clones the repository to `$HOME/build-server`, asks for the
-GitHub token and a registry password (or reads them from the environment), writes `.env`, generates
-a deploy SSH key, creates empty credential placeholders, writes the registry htpasswd, builds the
-runner image, and starts the fleet.
+The installer installs prerequisites, fetches the repository into a temporary clone, installs only
+the runtime files into `$HOME/build-server`, asks for the GitHub token and a registry password (or
+reads them from the environment), writes `.env`, generates a deploy SSH key, creates empty
+credential placeholders, writes the registry htpasswd, builds the runner image, and starts the
+fleet. Development files (tests, docs, git metadata) never reach the install directory.
 
 Useful flags and variables:
 
@@ -27,22 +28,26 @@ Useful flags and variables:
 | --- | --- |
 | `--no-start` | Configure everything but do not build or start |
 | `--non-interactive` | Never prompt; all values must come from the environment |
-| `--token` | Clone over HTTPS using `ACCESS_TOKEN` (default) |
-| `--ssh` | Clone over SSH using an existing key (`SSH_KEY`, default `~/.ssh/id_rsa`) |
-| `--generate-ssh-key` | Generate the key when missing, install the public key on GitHub, then clone over SSH |
+| `--token` | Fetch over HTTPS using `ACCESS_TOKEN` (default) |
+| `--ssh` | Fetch over SSH using an existing key (`SSH_KEY`, default `~/.ssh/id_rsa`) |
+| `--generate-ssh-key` | Generate the key when missing, install the public key on GitHub, then fetch over SSH |
 | `--orgs "A B"` | Organizations to serve; each is verified against GitHub. Interactive installs are prompted |
 | `--keep-orgs` | Keep the existing `orgs.conf` and skip the prompt |
+| `--slim` | Remove `.git` and development files from a legacy full checkout |
 | `ACCESS_TOKEN` | GitHub token (required — also used for runner registration) |
 | `ORGS` | Space- or comma-separated organization names (unattended equivalent of `--orgs`) |
 | `REGISTRY_USER`, `REGISTRY_PASS` | Registry credentials (`ci` and a generated password by default) |
 | `REGISTRY_HTTP_SECRET` | Registry signing secret (generated when absent) |
 | `REGISTRY_PORT` | Host port for the registry (default 5000; the installer picks a free port when 5000 is taken) |
-| `INSTALL_DIR` | Checkout location (default `$HOME/build-server`) |
+| `INSTALL_DIR` | Install location (default `$HOME/build-server`) |
 | `GIT_AUTH` | `token` (default) or `ssh`; flags win over the variable |
-| `SSH_KEY` | Key used for the checkout (default `~/.ssh/id_rsa`) |
+| `SSH_KEY` | Key used for the fetch (default `~/.ssh/id_rsa`) |
 | `REPO_SSH_URL` | Explicit SSH URL when it differs from the `REPO_URL` derivation |
 
-Re-run the same command any time to update the checkout and fleet.
+Re-run the same command any time to update the runtime files and fleet. The install records its
+revision in `.build-server-version` (shown by `./fleet.sh status`) and keeps a manifest of the
+installed files, so files renamed upstream are cleaned up on update. Your data — `.env`,
+`orgs.conf`, `registry/`, `ssh/`, credentials, and context directories — is never touched.
 
 The installer asks which organizations to serve and verifies each by minting a runner registration
 token — the same permission the fleet needs. It then writes `orgs.conf`, builds the default image
@@ -56,7 +61,7 @@ single re-run.
 
 ## Repository access
 
-The private repository can be cloned with the token or with SSH:
+The repository can be fetched with the token or with SSH:
 
 ```bash
 # HTTPS + token (default)
