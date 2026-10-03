@@ -37,6 +37,7 @@
 | `REGISTRY_PORT` | registry service | Host port for the registry (default 5000); runners use `registry:5000` inside the fleet |
 | `REGISTRY_ADDR` | generated runner services | Registry address inside the fleet (default `registry:5000`) — see [Publishing images](/guide/publishing) |
 | `REGISTRY_USER`, `REGISTRY_PASS` | generated runner services | Registry credentials injected for job pushes (from `.env`) |
+| `COMPOSE_PROJECT_NAME` | fleet.sh, `docker compose` | Container name prefix for this installation (default: install user) |
 | `INSECURE_REGISTRIES` | inner Docker daemon | Plain-HTTP registries (default `registry:5000`; empty disables) |
 | `DOCKERD_STORAGE_DRIVER` | inner Docker daemon | Optional storage-driver override (e.g. `vfs`); empty means detect and fall back automatically |
 | `RUNNER_EMAIL_DOMAIN` | start.sh | Domain for the runner's git identity email (default `users.noreply.github.com`) |

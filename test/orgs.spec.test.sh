@@ -65,13 +65,15 @@ Foo-Bar
 EOF
 MODEL="$(render_json "${S}")"
 [ "$(jq -r '.services | length' <<<"${MODEL}")" -eq 3 ] || fail "expected three services"
-for pair in "acmetools_1:AcmeTools" "globex_1:Globex" "foobar_1:Foo-Bar"; do
+for pair in "acmetools:AcmeTools" "globex:Globex" "foobar:Foo-Bar"; do
     svc="${pair%%:*}"
     org="${pair#*:}"
     [ "$(jq -r --arg s "${svc}" '.services[$s].environment.ORGANIZATION' <<<"${MODEL}")" = "${org}" ] ||
         fail "missing or wrong organization for ${svc}"
-    [ "$(jq -r --arg s "${svc}" '.services[$s].hostname' <<<"${MODEL}")" = "${svc%_1}_runner_1" ] ||
+    [ "$(jq -r --arg s "${svc}" '.services[$s].hostname' <<<"${MODEL}")" = "${svc}_runner_1" ] ||
         fail "wrong hostname for ${svc}"
+    [ "$(jq -r --arg s "${svc}" '.services[$s].container_name' <<<"${MODEL}")" = "null" ] ||
+        fail "${svc} must not pin a global container name"
 done
 grep -q 'generated' "${S}/generate.out" || fail "expected a summary on stdout"
 echo "PASS: valid config renders slug-derived services with a summary"
@@ -85,15 +87,15 @@ GheOrg url=https://ghe.example.com:8443/GheCorp
 CaseOrg url=https://GitHub.COM:443/CaseOrg
 EOF
 MODEL="$(render_json "${S}")"
-[ "$(jq -r '.services.plainorg_1.environment.GITHUB_URL' <<<"${MODEL}")" = "https://github.com/PlainOrg" ] ||
+[ "$(jq -r '.services.plainorg.environment.GITHUB_URL' <<<"${MODEL}")" = "https://github.com/PlainOrg" ] ||
     fail "default GITHUB_URL wrong"
-[ "$(jq -r '.services.plainorg_1.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://api.github.com" ] ||
+[ "$(jq -r '.services.plainorg.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://api.github.com" ] ||
     fail "default GITHUB_API_URL wrong"
-[ "$(jq -r '.services.gheorg_1.environment.GITHUB_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/GheCorp" ] ||
+[ "$(jq -r '.services.gheorg.environment.GITHUB_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/GheCorp" ] ||
     fail "custom GITHUB_URL wrong"
-[ "$(jq -r '.services.gheorg_1.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/api/v3" ] ||
+[ "$(jq -r '.services.gheorg.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://ghe.example.com:8443/api/v3" ] ||
     fail "custom GITHUB_API_URL derivation wrong"
-[ "$(jq -r '.services.caseorg_1.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://api.github.com" ] ||
+[ "$(jq -r '.services.caseorg.environment.GITHUB_API_URL' <<<"${MODEL}")" = "https://api.github.com" ] ||
     fail "case/port github.com normalization wrong"
 echo "PASS: URL defaults, GHES derivation, and github.com normalization"
 
@@ -107,9 +109,9 @@ CustomOrg context=orgs/custom
 DefaultOrg
 EOF
 MODEL="$(render_json "${S}")"
-[ "$(jq -r '.services.customorg_1.image' <<<"${MODEL}")" = "runner-image-customorg" ] ||
+[ "$(jq -r '.services.customorg.image' <<<"${MODEL}")" = "runner-image-customorg" ] ||
     fail "custom image wrong"
-[ "$(jq -r '.services.defaultorg_1.image' <<<"${MODEL}")" = "runner-image" ] ||
+[ "$(jq -r '.services.defaultorg.image' <<<"${MODEL}")" = "runner-image" ] ||
     fail "default image wrong"
 echo "PASS: context selects the custom image"
 
@@ -121,10 +123,10 @@ WithTemp build_temp=1
 WithoutTemp
 EOF
 MODEL="$(render_json "${S}")"
-WITH="$(jq -r '.services.withtemp_1.volumes[]?.target' <<<"${MODEL}")"
-WITHOUT="$(jq -r '.services.withouttemp_1.volumes[]?.target' <<<"${MODEL}")"
-[ "${WITH}" = "/build-temp" ] || fail "withtemp_1 must mount /build-temp (got ${WITH})"
-[ -z "${WITHOUT}" ] || fail "withouttemp_1 must not mount build-temp (got ${WITHOUT})"
+WITH="$(jq -r '.services.withtemp.volumes[]?.target' <<<"${MODEL}")"
+WITHOUT="$(jq -r '.services.withouttemp.volumes[]?.target' <<<"${MODEL}")"
+[ "${WITH}" = "/build-temp" ] || fail "withtemp must mount /build-temp (got ${WITH})"
+[ -z "${WITHOUT}" ] || fail "withouttemp must not mount build-temp (got ${WITHOUT})"
 echo "PASS: build_temp is scoped to its org"
 
 # --- Validation failures name the line and write nothing -----------------------------------

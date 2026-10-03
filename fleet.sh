@@ -17,6 +17,19 @@ if [ -f "${ROOT}/.env" ]; then
     set +a
 fi
 
+# Compose project names must start with a letter or number and may contain only lowercase
+# letters, numbers, hyphens, and underscores.
+compose_project_name() {
+    local value
+    value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[^a-z0-9]*//')"
+    [ -n "${value}" ] || value="build-server"
+    printf '%s' "${value}"
+}
+
+# The project name prefixes every container so several installations can share one Docker host.
+# .env sets it (bootstrap defaults it to the install user); the login name is the fallback.
+COMPOSE_PROJECT_NAME="$(compose_project_name "${COMPOSE_PROJECT_NAME:-$(id -un)}")"
+
 ORGS_FILE="${ROOT}/orgs.conf"
 GENERATED_FILE="${ROOT}/docker-compose.generated.yml"
 RUNNER_VERSION_FILE="${ROOT}/.runner-version"
@@ -163,11 +176,10 @@ render_compose() {
             image="runner-image"
             [ -z "${context}" ] || image="runner-image-${slug}"
             cat <<EOF
-  ${slug}_1:
+  ${slug}:
     image: ${image}
     pull_policy: never
     hostname: ${slug}_runner_1
-    container_name: ${slug}_runner_1
     restart: unless-stopped
     privileged: true
     environment:
@@ -194,9 +206,10 @@ EOF
     echo "fleet: generated ${#ORG_NAMES[@]} runner(s): ${ORG_SLUGS[*]}"
 }
 
-# Run docker compose against the merged fleet definition.
+# Run docker compose against the merged fleet definition under the project name.
 compose() {
-    docker compose -f docker-compose.yml -f docker-compose.generated.yml "$@"
+    docker compose --project-name "${COMPOSE_PROJECT_NAME}" \
+        -f docker-compose.yml -f docker-compose.generated.yml "$@"
 }
 
 # The runner version a build would use: the pinned state file, else the Dockerfile default.
@@ -231,7 +244,7 @@ print_fleet() {
         slug="${ORG_SLUGS[$i]}"
         image="runner-image"
         [ -z "${ORG_CONTEXTS[$i]}" ] || image="runner-image-${slug}"
-        printf '%-22s %-26s %-26s %s\n' "${slug}_1" "${image}" "${slug}_runner_1" "${name}"
+        printf '%-22s %-26s %-26s %s\n' "${slug}" "${image}" "${slug}_runner_1" "${name}"
     done
     echo "Runner version: $(resolved_version)"
     echo "Host version: $(host_version)"
@@ -354,7 +367,8 @@ update_org() {
     else
         build_default
     fi
-    compose up -d --no-deps "${slug}_1"
+    remove_legacy_containers
+    compose up -d --no-deps "${slug}"
 }
 
 # Rebuild every image with the latest runner version and recreate the fleet.
@@ -367,6 +381,26 @@ update_runners() {
     done
     printf '%s\n' "${version}" >"${RUNNER_VERSION_FILE}"
     compose up -d
+}
+
+# Older versions pinned global container names. Remove those leftovers when their Compose project
+# label matches the install directory's former project name, so the project-prefixed containers
+# can start without name or port conflicts. Containers of other projects are left alone.
+remove_legacy_containers() {
+    local legacy_project name label slug
+    legacy_project="$(compose_project_name "$(basename "${ROOT}")")"
+    local names=("${legacy_project}-registry-1" "${legacy_project}_registry_1")
+    for slug in "${ORG_SLUGS[@]}"; do
+        names+=("${slug}_runner_1")
+    done
+    for name in "${names[@]}"; do
+        label="$(docker container inspect \
+            --format '{{ index .Config.Labels "com.docker.compose.project" }}' \
+            "${name}" 2>/dev/null || true)"
+        [ "${label}" = "${legacy_project}" ] || continue
+        docker rm -f "${name}" >/dev/null
+        echo "fleet: removed legacy container ${name}"
+    done
 }
 
 # Fail fast with a clear message when a runner image has not been built locally.
@@ -415,11 +449,13 @@ case "${COMMAND}" in
         parse_config
         render_compose
         require_images
+        remove_legacy_containers
         compose up -d
         ;;
     down)
         parse_config
         render_compose
+        remove_legacy_containers
         compose down --remove-orphans
         ;;
     stop)
@@ -436,6 +472,7 @@ case "${COMMAND}" in
         parse_config
         render_compose
         require_images
+        remove_legacy_containers
         compose down --remove-orphans
         compose up -d
         ;;

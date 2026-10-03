@@ -2,16 +2,19 @@
 
 ```
 Host
-├── registry (:5000, htpasswd)        docker-compose.yml (static base)
-├── acmetools_1   ─┐
-├── globex_1       │  privileged runner containers
-├── initech_1      │  (one per organization)
-└── contoso_1     ─┘        docker-compose.generated.yml
+├── <project>-registry-1 (:5000, htpasswd)   docker-compose.yml (static base)
+├── <project>-acmetools-1 ─┐
+├── <project>-globex-1     │  privileged runner containers
+├── <project>-initech-1    │  (one per organization)
+└── <project>-contoso-1   ─┘  docker-compose.generated.yml
       │
       ├── dockerd          private daemon inside the container
       ├── actions-runner   runs as the unprivileged "docker" user
       └── job containers   created by the private daemon
 ```
+
+Container names are prefixed with the Compose project name (`COMPOSE_PROJECT_NAME` in `.env`; the
+install user by default), so several installations can share one Docker host.
 
 ## Components
 

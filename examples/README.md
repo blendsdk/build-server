@@ -44,9 +44,9 @@ the production organizations.
    ```bash
    ./fleet.sh build
    ./fleet.sh generate
-   docker compose -f docker-compose.yml -f docker-compose.generated.yml up -d testorg_1
+   docker compose -f docker-compose.yml -f docker-compose.generated.yml up -d testorg
    ./fleet.sh status
-   docker compose -f docker-compose.yml -f docker-compose.generated.yml logs -f testorg_1
+   docker compose -f docker-compose.yml -f docker-compose.generated.yml logs -f testorg
    ```
 
 5. Dispatch `test/smoke-workflow.yml` (copy it to `.github/workflows/` of a repository in the test

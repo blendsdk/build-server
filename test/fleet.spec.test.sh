@@ -22,7 +22,7 @@ new_sandbox() {
     printf 'ARG RUNNER_VERSION="1.2.3"\n' > "${dir}/Dockerfile"
     printf 'services: {}\n' > "${dir}/docker-compose.yml"
     # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
-    printf '#!/bin/bash\nprintf "docker %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"image inspect"*) exit "${IMAGE_INSPECT_EXIT:-0}" ;;\nesac\nexit "${DOCKER_EXIT:-0}"\n' \
+    printf '#!/bin/bash\nprintf "docker %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"container inspect"*) printf "%%s\\n" "${LEGACY_PROJECT:-}"; exit "${INSPECT_EXIT:-0}" ;;\n    *"image inspect"*) exit "${IMAGE_INSPECT_EXIT:-0}" ;;\nesac\nexit "${DOCKER_EXIT:-0}"\n' \
         > "${dir}/bin/docker"
     # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
     printf '#!/bin/bash\nprintf "curl %%s\\n" "$*" >> "${TRACE}"\nprintf "%%s" "${CURL_BODY:-}"\nprintf "\\n%%s" "${CURL_HTTP_CODE:-200}"\nexit "${CURL_EXIT:-0}"\n' \
@@ -72,7 +72,7 @@ run_fleet "${S}" update Beta >"${S}/out" 2>&1 || {
     fail "update Beta should succeed"
 }
 grep -q -- '-t runner-image-beta ' "${S}/trace" || fail "custom image build missing"
-grep -qF -- '-f docker-compose.yml -f docker-compose.generated.yml up -d --no-deps beta_1' "${S}/trace" ||
+grep -qF -- '-f docker-compose.yml -f docker-compose.generated.yml up -d --no-deps beta' "${S}/trace" ||
     fail "targeted recreate missing"
 [ "$(grep -c ' up ' "${S}/trace")" -eq 1 ] || fail "only one compose up expected"
 [ -f "${S}/docker-compose.generated.yml" ] || fail "generate must run before update"
@@ -86,7 +86,7 @@ run_fleet "${S}" update Alpha >"${S}/out" 2>&1 || {
     fail "update Alpha should succeed"
 }
 grep -q -- '-t runner-image ' "${S}/trace" || fail "default image build missing"
-grep -qF -- 'up -d --no-deps alpha_1' "${S}/trace" || fail "targeted recreate missing"
+grep -qF -- 'up -d --no-deps alpha' "${S}/trace" || fail "targeted recreate missing"
 grep -q -- '--build-arg RUNNER_VERSION=' "${S}/trace" || fail "resolved version arg missing"
 echo "PASS: update <org> uses the default image when no context is configured"
 
@@ -132,7 +132,7 @@ while read -r invocation; do
         *'-f docker-compose.yml -f docker-compose.generated.yml'*) ;;
         *) fail "compose invocation missing both -f files: ${line}" ;;
     esac
-done < <(grep -n 'compose' "${S}/trace" | cut -d: -f1)
+done < <(grep -n 'docker compose' "${S}/trace" | cut -d: -f1)
 [ -f "${S}/docker-compose.generated.yml" ] || fail "generate must run first"
 echo "PASS: compose commands use generate-first and both -f files"
 
@@ -200,7 +200,7 @@ S="${T}/status"
 new_sandbox "${S}"
 printf '9.9.9\n' > "${S}/.runner-version"
 run_fleet "${S}" status >"${S}/out" 2>&1 || fail "status should succeed"
-for expected in "Alpha" "alpha_1" "beta_1" "runner-image-beta" "Runner version: 9.9.9"; do
+for expected in "Alpha" "alpha" "beta" "runner-image-beta" "Runner version: 9.9.9"; do
     grep -qF "${expected}" "${S}/out" || fail "status output missing '${expected}'"
 done
 echo "PASS: status reports the fleet and the pinned version"
@@ -213,6 +213,44 @@ run_fleet "${S}" status >"${S}/out" 2>&1 || fail "status should succeed with a h
 grep -qF 'Host version: abc123 (2026-10-03T10:00:00Z)' "${S}/out" ||
     fail "status must report the installed revision"
 echo "PASS: status reports the installed host revision"
+
+# --- the Compose project name comes from .env ------------------------------------------------
+S="${T}/project-name"
+new_sandbox "${S}"
+printf 'COMPOSE_PROJECT_NAME=user-proj\n' > "${S}/.env"
+run_fleet "${S}" status >/dev/null 2>&1 || fail "status should succeed with a project name"
+grep -qF -- '--project-name user-proj' "${S}/trace" ||
+    fail "the project name from .env must be used"
+echo "PASS: the Compose project name comes from .env"
+
+# --- without .env the login name is the fallback project name --------------------------------
+S="${T}/project-fallback"
+new_sandbox "${S}"
+run_fleet "${S}" status >/dev/null 2>&1 || fail "status should succeed without .env"
+grep -qE -- '--project-name [a-z0-9][a-z0-9_-]*' "${S}/trace" ||
+    fail "a sanitized login name must be used as the project name"
+echo "PASS: the login name is the fallback project name"
+
+# --- legacy containers from older installs are removed before starting -----------------------
+S="${T}/legacy-cleanup"
+new_sandbox "${S}"
+OLD_PROJECT="$(basename "${S}")"
+LEGACY_PROJECT="${OLD_PROJECT}" run_fleet "${S}" up >"${S}/out" 2>&1 ||
+    fail "up should succeed while cleaning legacy containers"
+grep -qF 'docker rm -f alpha_runner_1' "${S}/trace" || fail "legacy runner container must be removed"
+grep -qF 'docker rm -f beta_runner_1' "${S}/trace" || fail "every legacy runner container must be removed"
+grep -qF "docker rm -f ${OLD_PROJECT}-registry-1" "${S}/trace" ||
+    fail "legacy registry container must be removed"
+grep -qi 'legacy' "${S}/out" || fail "legacy removals should be reported"
+echo "PASS: legacy containers are removed before starting"
+
+# --- containers belonging to another project are never removed -------------------------------
+S="${T}/legacy-guard"
+new_sandbox "${S}"
+LEGACY_PROJECT="someone-else" run_fleet "${S}" up >/dev/null 2>&1 ||
+    fail "up should succeed when the inspected containers belong to another project"
+grep -q 'docker rm -f' "${S}/trace" && fail "containers of other projects must not be removed"
+echo "PASS: containers of other projects are left alone"
 
 # --- error paths leave the pinned version untouched ----------------------------------------
 S="${T}/api-fail"

@@ -43,11 +43,16 @@ bash bootstrap.sh --keep-orgs --slim
 The version is written to `.runner-version` only after every image built successfully. If a build
 fails, the pin is unchanged and the fleet keeps running the previous version.
 
-## Renamed services
+## Container names
 
-The generated service names are slug-derived from the organization name. If you migrate from an
-older hand-written fleet, run `./fleet.sh restart` once so containers with the old names are removed
-as orphans.
+Container names are prefixed with the Compose project name (`COMPOSE_PROJECT_NAME` in `.env`; the
+install user by default), and services are named after the organization slug (`acmetools`).
+Compose derives each container name as `<project>-<service>-1`, so two installations on one Docker
+host never collide.
+
+Older versions used global names (`<slug>_runner_1` and the install directory for the registry).
+`up`, `down`, `restart`, and `update` remove those leftovers automatically — they are matched by
+their Compose project label — so the first start after an upgrade needs no manual cleanup.
 
 ## Backups
 

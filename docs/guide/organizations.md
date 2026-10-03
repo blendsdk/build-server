@@ -23,12 +23,14 @@ or empty slugs, and an empty file all fail `generate` with the offending line.
 
 ## Generated names
 
-The service name is derived from the organization: lowercase and alphanumeric only.
+The service name is derived from the organization: lowercase and alphanumeric only. Container names
+are prefixed with the Compose project name (`COMPOSE_PROJECT_NAME` in `.env`; the install user by
+default), so several installations can share one Docker host.
 
-| Organization | Service | Hostname | Runner name |
-| --- | --- | --- | --- |
-| `AcmeTools` | `acmetools_1` | `acmetools_runner_1` | `AcmeTools_acmetools_runner_1` |
-| `Initech` | `initech_1` | `initech_runner_1` | `Initech_initech_runner_1` |
+| Organization | Service | Container | Hostname | Runner name |
+| --- | --- | --- | --- | --- |
+| `AcmeTools` | `acmetools` | `<project>-acmetools-1` | `acmetools_runner_1` | `AcmeTools_acmetools_runner_1` |
+| `Initech` | `initech` | `<project>-initech-1` | `initech_runner_1` | `Initech_initech_runner_1` |
 
 Be aware of slug collisions (`Foo.Bar` and `Foo-Bar` both become `foobar`); `generate` rejects
 them.

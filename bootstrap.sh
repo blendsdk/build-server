@@ -118,6 +118,15 @@ load_env_var() {
     printf -v "${name}" '%s' "${value}"
 }
 
+# Compose project names must start with a letter or number and may contain only lowercase
+# letters, numbers, hyphens, and underscores.
+compose_project_name() {
+    local value
+    value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[^a-z0-9]*//')"
+    [ -n "${value}" ] || value="build-server"
+    printf '%s' "${value}"
+}
+
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=()
 else
@@ -331,7 +340,11 @@ load_env_var REGISTRY_USER
 load_env_var REGISTRY_PASS
 load_env_var REGISTRY_HTTP_SECRET
 load_env_var REGISTRY_PORT
+load_env_var COMPOSE_PROJECT_NAME
 REGISTRY_USER="${REGISTRY_USER:-ci}"
+# The Compose project name prefixes every container; default it to the install user so several
+# installations can share one Docker host.
+COMPOSE_PROJECT_NAME="$(compose_project_name "${COMPOSE_PROJECT_NAME:-$(id -un)}")"
 
 if [ -z "${ACCESS_TOKEN:-}" ]; then
     prompt_var ACCESS_TOKEN "GitHub token with runner admin on every org in orgs.conf (classic PAT with admin:org - see docs/guide/github-token)" secret
@@ -463,9 +476,9 @@ configure_orgs
 if [ ! -f .env ]; then
     REGISTRY_PORT_SELECTED="$(choose_registry_port)"
     umask 077
-    printf 'ACCESS_TOKEN=%s\nREGISTRY_HTTP_SECRET=%s\nREGISTRY_PORT=%s\nREGISTRY_USER=%s\nREGISTRY_PASS=%s\n' \
+    printf 'ACCESS_TOKEN=%s\nREGISTRY_HTTP_SECRET=%s\nREGISTRY_PORT=%s\nREGISTRY_USER=%s\nREGISTRY_PASS=%s\nCOMPOSE_PROJECT_NAME=%s\n' \
         "${ACCESS_TOKEN}" "${REGISTRY_HTTP_SECRET}" "${REGISTRY_PORT_SELECTED}" \
-        "${REGISTRY_USER}" "${REGISTRY_PASS}" >.env
+        "${REGISTRY_USER}" "${REGISTRY_PASS}" "${COMPOSE_PROJECT_NAME}" >.env
     chmod 600 .env
     say "wrote .env"
 else
@@ -486,6 +499,10 @@ else
     if ! grep -q '^REGISTRY_PASS=' .env; then
         printf 'REGISTRY_PASS=%s\n' "${REGISTRY_PASS}" >>.env
         say "added REGISTRY_PASS to .env"
+    fi
+    if ! grep -q '^COMPOSE_PROJECT_NAME=' .env; then
+        printf 'COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME}" >>.env
+        say "added COMPOSE_PROJECT_NAME to .env"
     fi
 fi
 

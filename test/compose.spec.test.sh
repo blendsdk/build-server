@@ -38,7 +38,7 @@ RUNNER_FILTER='[.services | to_entries[] | select(.value.image | startswith("run
 # The model is exactly the registry plus one runner service per organization.
 ORG_COUNT="$(awk '/^[A-Za-z0-9._-]+/ { count++ } END { print count + 0 }' orgs.conf)"
 EXPECTED_SERVICES="$(
-    { echo "registry"; awk '/^[A-Za-z0-9._-]+/ { slug=tolower($1); gsub(/[^a-z0-9]/, "", slug); print slug "_1" }' orgs.conf; } | sort | paste -sd, -
+    { echo "registry"; awk '/^[A-Za-z0-9._-]+/ { slug=tolower($1); gsub(/[^a-z0-9]/, "", slug); print slug }' orgs.conf; } | sort | paste -sd, -
 )"
 SERVICES="$(jq -r '.services | keys | sort | join(",")' "${MODEL}")"
 [ "${SERVICES}" = "${EXPECTED_SERVICES}" ] || fail "unexpected service set: ${SERVICES}"
@@ -57,10 +57,15 @@ PULL_POLICY="$(jq '[.services | to_entries[] | select(.value.image | startswith(
 
 # Organization to hostname mapping is slug-derived and matches orgs.conf.
 EXPECTED_MAPPING="$(
-    awk '/^[A-Za-z0-9._-]+/ { slug=tolower($1); gsub(/[^a-z0-9]/, "", slug); print $1 "=" slug "_runner_1/" slug "_runner_1" }' orgs.conf | sort
+    awk '/^[A-Za-z0-9._-]+/ { slug=tolower($1); gsub(/[^a-z0-9]/, "", slug); print $1 "=" slug "_runner_1" }' orgs.conf | sort
 )"
-MAPPING="$(jq -r "${RUNNER_FILTER} | map(\"\(.value.environment.ORGANIZATION)=\(.value.hostname)/\(.value.container_name)\") | sort | join(\"\n\")" "${MODEL}")"
+MAPPING="$(jq -r "${RUNNER_FILTER} | map(\"\(.value.environment.ORGANIZATION)=\(.value.hostname)\") | sort | join(\"\n\")" "${MODEL}")"
 [ "${MAPPING}" = "${EXPECTED_MAPPING}" ] || fail "organization mapping mismatch: ${MAPPING}"
+
+# Containers must derive their names from the Compose project; pinning a global container name
+# would make two installations on one host collide.
+NAMED="$(jq '[.services[] | select(.container_name != null)] | length' "${MODEL}")"
+[ "${NAMED}" -eq 0 ] || fail "no service may pin a global container name"
 
 # No host Docker socket and no host network mode.
 jq -e '[.. | strings | select(test("docker.sock"))] | length == 0' "${MODEL}" >/dev/null ||
@@ -85,15 +90,15 @@ REGISTRY_USER=dummy-user REGISTRY_PASS=dummy-pass REGISTRY_ADDR=registry:5000 \
         fail "compose model with registry credentials is invalid"
     }
 REGISTRY_MODEL="${T}/model-registry.json"
-[ "$(jq -r '.services.acmetools_1.environment.REGISTRY_ADDR' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
+[ "$(jq -r '.services.acmetools.environment.REGISTRY_ADDR' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
     fail "REGISTRY_ADDR was not injected into runner services"
-[ "$(jq -r '.services.acmetools_1.environment.REGISTRY_USER' "${REGISTRY_MODEL}")" = "dummy-user" ] ||
+[ "$(jq -r '.services.acmetools.environment.REGISTRY_USER' "${REGISTRY_MODEL}")" = "dummy-user" ] ||
     fail "REGISTRY_USER was not injected into runner services"
-[ "$(jq -r '.services.acmetools_1.environment.REGISTRY_PASS' "${REGISTRY_MODEL}")" = "dummy-pass" ] ||
+[ "$(jq -r '.services.acmetools.environment.REGISTRY_PASS' "${REGISTRY_MODEL}")" = "dummy-pass" ] ||
     fail "REGISTRY_PASS was not injected into runner services"
-[ "$(jq -r '.services.acmetools_1.environment.INSECURE_REGISTRIES' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
+[ "$(jq -r '.services.acmetools.environment.INSECURE_REGISTRIES' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
     fail "INSECURE_REGISTRIES default missing from runner services"
-[ "$(jq -r '.services.acmetools_1.environment.DOCKERD_STORAGE_DRIVER' "${REGISTRY_MODEL}")" = "vfs" ] ||
+[ "$(jq -r '.services.acmetools.environment.DOCKERD_STORAGE_DRIVER' "${REGISTRY_MODEL}")" = "vfs" ] ||
     fail "DOCKERD_STORAGE_DRIVER override was not injected"
 
 # The registry host port is configurable; runners use registry:5000 regardless.

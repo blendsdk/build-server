@@ -210,6 +210,10 @@ grep -q '^ACCESS_TOKEN=secret-token$' "${T}/install/.env" || fail ".env token wr
 grep -q '^REGISTRY_HTTP_SECRET=secret-http$' "${T}/install/.env" || fail ".env secret wrong"
 grep -q '^REGISTRY_USER=ci$' "${T}/install/.env" || fail ".env registry user wrong"
 grep -q '^REGISTRY_PASS=secret-pass$' "${T}/install/.env" || fail ".env registry password wrong"
+EXPECTED_PROJECT="$(printf '%s' "$(id -un)" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[^a-z0-9]*//')"
+[ -n "${EXPECTED_PROJECT}" ] || EXPECTED_PROJECT=build-server
+grep -q "^COMPOSE_PROJECT_NAME=${EXPECTED_PROJECT}$" "${T}/install/.env" ||
+    fail "the Compose project name must default to the sanitized login name"
 
 for file in .npmrc .yarnrc .bunfig.toml config.json; do
     [ -f "${T}/install/${file}" ] || fail "placeholder ${file} missing"
@@ -248,6 +252,7 @@ grep -q '^ACCESS_TOKEN=keep-me$' "${T}/install/.env" || fail "rerun must not ove
 grep -q '^REGISTRY_PORT=' "${T}/install/.env" || fail "a missing REGISTRY_PORT should be added on rerun"
 grep -q '^REGISTRY_USER=ci$' "${T}/install/.env" || fail "missing registry user should be added on rerun"
 grep -q '^REGISTRY_PASS=other-pass$' "${T}/install/.env" || fail "an explicit registry password should be recorded on rerun"
+grep -q '^COMPOSE_PROJECT_NAME=' "${T}/install/.env" || fail "the Compose project name should be recorded on rerun"
 grep -q 'git .*clone' "${T}/trace" || fail "rerun must refresh the runtime files from a temporary clone"
 echo "PASS: reruns refresh the runtime files and preserve .env"
 
@@ -440,6 +445,7 @@ REGISTRY_USER=ci
 REGISTRY_PASS=keep-pass
 REGISTRY_HTTP_SECRET=keep-http
 REGISTRY_PORT=5002
+COMPOSE_PROJECT_NAME=keep-proj
 EOF
 # shellcheck disable=SC2016  # a literal bcrypt hash, not a shell expansion
 printf 'ci:$2y$goodhash\n' > "${T}/install-match/registry/auth/registry.password"
@@ -455,6 +461,8 @@ grep -q -- '-Bbn' "${T}/trace" && fail "a matching htpasswd must not be regenera
 grep -q '^REGISTRY_PASS=keep-pass$' "${T}/install-match/.env" || fail "credentials must be preserved"
 grep -q '^REGISTRY_PORT=5002$' "${T}/install-match/.env" || fail "the recorded port must be preserved"
 grep -q '^ACCESS_TOKEN=keep-token$' "${T}/install-match/.env" || fail "the recorded token must be preserved"
+grep -q '^COMPOSE_PROJECT_NAME=keep-proj$' "${T}/install-match/.env" ||
+    fail "the recorded project name must be preserved"
 echo "PASS: a complete, matching installation is left untouched"
 
 # --- Updates refresh the runtime files, keep state, and remove vanished files -----------------

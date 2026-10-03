@@ -77,8 +77,8 @@ Alpha
 Beta
 EOF
 run_generate "${S}" >/dev/null
-grep -q '^  alpha_1:$' "${S}/docker-compose.generated.yml" || fail "Alpha service missing"
-grep -q '^  beta_1:$' "${S}/docker-compose.generated.yml" || fail "Beta service missing"
+grep -q '^  alpha:$' "${S}/docker-compose.generated.yml" || fail "Alpha service missing"
+grep -q '^  beta:$' "${S}/docker-compose.generated.yml" || fail "Beta service missing"
 echo "PASS: whitespace and full-line comments are handled"
 
 # --- status prints the fleet and compose state ----------------------------------------------
@@ -98,7 +98,7 @@ chmod +x "${S}/bin/docker"
 : > "${S}/trace"
 (cd "${S}" && ACCESS_TOKEN=dummy PATH="${S}/bin:${PATH}" TRACE="${S}/trace" bash fleet.sh status) >"${S}/out" 2>&1 ||
     fail "status should succeed with a stubbed docker"
-for expected in "Alpha" "alpha_1" "alpha_runner_1" "runner-image" "Runner version:" "alpha-container"; do
+for expected in "Alpha" "alpha" "alpha_runner_1" "runner-image" "Runner version:" "alpha-container"; do
     grep -qF "${expected}" "${S}/out" || fail "status output missing '${expected}'"
 done
 grep -qF -- '-f docker-compose.yml -f docker-compose.generated.yml ps' "${S}/trace" ||
