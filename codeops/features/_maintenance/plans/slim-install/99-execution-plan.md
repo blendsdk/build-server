@@ -1,7 +1,7 @@
 # Task T-08: Minimal production install
 
 > **Type**: Task (lightweight) · **Feature**: _maintenance · **CodeOps Artifact Schema**: 1
-> **Progress**: 6/8 tasks (75%)
+> **Progress**: 8/8 tasks (100%)
 
 ## Objective
 
@@ -34,7 +34,7 @@ explicit `--slim` migration for existing full clones.
 - [x] T-08.4 `fleet.sh status` host version
 - [x] T-08.5 Docs: `getting-started`, `upgrades`, `files.md`, `testing.md`, `README.md`
 - [x] T-08.6 Verify: `shellcheck -S style … && bash test/verify.sh && npm run docs:build`
-- [ ] T-08.7 Fleet E2E: `bash bootstrap.sh --keep-orgs --slim` on the remote host, then smoke workflow
-- [ ] T-08.8 Roadmap bookkeeping and commit
+- [x] T-08.7 Fleet E2E: `bash bootstrap.sh --keep-orgs --slim` on the remote host, then smoke workflow
+- [x] T-08.8 Roadmap bookkeeping and commit
 
 **Verify**: `shellcheck -S style bootstrap.sh fleet.sh entrypoint.sh start.sh test/*.sh examples/playground.sh && bash test/verify.sh && npm run docs:build`
