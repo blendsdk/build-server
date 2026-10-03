@@ -87,6 +87,12 @@ EOF
 exit 0
 EOF
 
+    cat > "${bin}/ssh-keyscan" <<'EOF'
+#!/bin/bash
+printf '%s ssh-ed25519 AAAATESTKEY\n' "${1:-github.com}"
+exit 0
+EOF
+
     cat > "${bin}/sg" <<'EOF'
 #!/bin/bash
 printf 'sg %s\n' "$*" >> "${TRACE}"
@@ -181,5 +187,55 @@ ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http \
     fail "bootstrap should generate a registry password when none is given"
 grep -qi 'registry password' "${T}/out-gen" || fail "generated registry password should be reported"
 echo "PASS: generated registry password is reported"
+
+# --- SSH clone with an existing key ----------------------------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-ssh/.ssh" "${T}/install-ssh"
+printf 'private' > "${T}/home-ssh/.ssh/id_rsa"
+printf 'public' > "${T}/home-ssh/.ssh/id_rsa.pub"
+: > "${T}/trace"
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-ssh" "${T}/install-ssh" --no-start --ssh >"${T}/out-ssh" 2>&1 ||
+    {
+        cat "${T}/out-ssh" >&2
+        fail "SSH bootstrap should succeed with an existing key"
+    }
+grep -q 'git clone --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
+    fail "SSH mode must clone over git@github.com"
+grep -q 'AUTHORIZATION: bearer' "${T}/trace" && fail "SSH mode must not send the token to git"
+[ -f "${T}/install-ssh/.env" ] || fail "SSH mode must still write .env"
+echo "PASS: SSH clone with an existing key"
+
+# --- Generate and install a new SSH key ------------------------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-gen" "${T}/install-gen"
+: > "${T}/trace"
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-gen" "${T}/install-gen" --no-start --generate-ssh-key \
+    >"${T}/out-genkey" 2>&1 ||
+    {
+        cat "${T}/out-genkey" >&2
+        fail "generated-key bootstrap should succeed"
+    }
+grep -q 'ssh-keygen' "${T}/trace" || fail "a new key must be generated"
+grep -q '/user/keys' "${T}/trace" || fail "the public key must be installed via the API"
+grep -qi 'installed the SSH public key' "${T}/out-genkey" || fail "success message missing"
+grep -q 'git clone --branch main git@github.com:blendsdk/build-server.git' "${T}/trace" ||
+    fail "generated-key mode must clone over git@github.com"
+[ -f "${T}/home-gen/.ssh/id_rsa" ] || fail "generated key missing"
+echo "PASS: generate and install a new SSH key"
+
+# --- SSH without a key fails with guidance ---------------------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-nokey" "${T}/install-nokey"
+set +e
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-nokey" "${T}/install-nokey" --no-start --ssh \
+    >"${T}/out-nokey" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "SSH mode without a key must fail"
+grep -q -- '--generate-ssh-key' "${T}/out-nokey" || fail "missing-key error should mention --generate-ssh-key"
+echo "PASS: SSH without a key fails with guidance"
 
 echo "bootstrap spec tests: PASS"
