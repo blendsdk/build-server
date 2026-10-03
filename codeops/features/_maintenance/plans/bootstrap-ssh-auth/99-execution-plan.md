@@ -1,7 +1,7 @@
 # Task T-01: Bootstrap SSH clone support
 
 > **Type**: Task (lightweight) · **Feature**: _maintenance · **CodeOps Artifact Schema**: 1
-> **Progress**: 2/5 tasks (40%)
+> **Progress**: 3/5 tasks (60%)
 
 ## Objective
 
@@ -19,7 +19,7 @@ runner registration in every mode.
 
 - [x] T-01.1 Extend `test/bootstrap.spec.test.sh`: SSH with an existing key, `--generate-ssh-key` upload, and SSH without a key ✅ (completed: 2026-10-03 14:14)
 - [x] T-01.2 Red phase: the new cases fail because the flags do not exist ✅ (completed: 2026-10-03 14:14)
-- [ ] T-01.3 Implement flags, SSH URL conversion, key ensure/generate/register, known_hosts, and SSH clone/update in `bootstrap.sh`
+- [x] T-01.3 Implement flags, SSH URL conversion, key ensure/generate/register, known_hosts, and SSH clone/update in `bootstrap.sh` ✅ (completed: 2026-10-03 14:17)
 - [ ] T-01.4 Green phase plus docs updates (`getting-started`, `github-token`, `files`, README, script usage)
 - [ ] T-01.5 Full verification: `shellcheck`, `bash test/verify.sh`, `npm run docs:build`
 
