@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "mode": "strict",
+  "artifacts": {"layout": "nested", "root": "codeops"},
+  "quality": {
+    "independentReview": true,
+    "minimumReviewers": 1,
+    "stopOnMajorFinding": true
+  },
+  "metrics": {"enabled": false}
+}

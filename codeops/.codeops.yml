@@ -1,0 +1,10 @@
+# CodeOps layout marker. Presence of this file opts the repo into the nested layout.
+# Sole writer: the setup-codeops skill. Schema: _shared/layout-convention.md
+codeopsLayout: nested
+layoutVersion: "3.0.0"
+integrationBranch: main
+conventions:
+  rdIdScope: per-feature
+  taskIdPrefix: "T"
+  maintenanceFeature: _maintenance
+  archiveDir: codeops/_archive
