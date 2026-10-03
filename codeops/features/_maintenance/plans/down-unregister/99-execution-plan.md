@@ -1,7 +1,7 @@
 # Task T-10: Remove runner registrations on fleet down
 
 > **Type**: Task (lightweight) · **Feature**: _maintenance · **CodeOps Artifact Schema**: 1
-> **Progress**: 4/5 tasks (80%)
+> **Progress**: 5/5 tasks (100%)
 
 ## Objective
 
@@ -25,6 +25,6 @@ registrations through the API so the organizations no longer list offline runner
 - [x] T-10.2 Red phase
 - [x] T-10.3 Implement `unregister_runners` and wire it into `down`
 - [x] T-10.4 Docs: admin CLI
-- [ ] T-10.5 Verify, commit, push, watch CI
+- [x] T-10.5 Verify, commit, push, watch CI
 
 **Verify**: `shellcheck -S style fleet.sh test/*.sh && bash test/verify.sh && npm run docs:build`

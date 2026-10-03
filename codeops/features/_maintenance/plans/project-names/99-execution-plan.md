@@ -1,7 +1,7 @@
 # Task T-09: Project-named containers for multi-install hosts
 
 > **Type**: Task (lightweight) · **Feature**: _maintenance · **CodeOps Artifact Schema**: 1
-> **Progress**: 5/6 tasks (83%)
+> **Progress**: 6/6 tasks (100%)
 
 ## Objective
 
@@ -28,6 +28,6 @@ remove legacy-named containers on upgrade.
 - [x] T-09.3 Implement `fleet.sh` and `bootstrap.sh`
 - [x] T-09.4 Docs: organizations, architecture overview, upgrades, examples, files
 - [x] T-09.5 Verify plus a real Compose naming check
-- [ ] T-09.6 Commit, push, watch CI
+- [x] T-09.6 Commit, push, watch CI
 
 **Verify**: `shellcheck -S style bootstrap.sh fleet.sh entrypoint.sh start.sh work_queue test/*.sh examples/playground.sh && bash test/verify.sh && npm run docs:build`
