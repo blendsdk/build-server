@@ -32,8 +32,8 @@ Builds use `.runner-version` first and fall back to the Dockerfile `ARG RUNNER_V
 ## GitHub Enterprise
 
 The release lookup is always github.com; GHES instances can require a compatible runner build.
-Write the version your GHES instance supports to `.runner-version` and avoid `update-runners`, or
-fetch the release from your GHES instance and pass the version explicitly.
+Check the version your GHES instance supports and write it to `.runner-version` before building;
+avoid `update-runners` on a GHES-only fleet unless that version matches.
 
 ## Why pin at all
 

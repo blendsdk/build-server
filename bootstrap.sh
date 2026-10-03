@@ -15,7 +15,7 @@
 #   REGISTRY_HTTP_SECRET    registry signing secret (generated when absent)
 #   INSTALL_DIR             checkout location (default: $HOME/build-server)
 #   REPO_URL                repository to clone (default: the project repository)
-#   BRANCH                  branch to check out (default: v1-rebuild)
+#   BRANCH                  branch to check out (default: main)
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/blendsdk/build-server.git}"

@@ -24,8 +24,7 @@ bash test/fleet.impl.test.sh
 bash test/bootstrap.spec.test.sh
 
 echo "removed-script references..."
-if git grep --untracked -nE '(build-image|restart)\.sh' -- . \
-    ':(exclude)codeops' ':(exclude).opencode' ':(exclude)test/verify.sh'; then
+if git grep --untracked -nE '(build-image|restart)\.sh' -- . ':(exclude)test/verify.sh'; then
     echo "ERROR: shipped files must not reference the removed scripts" >&2
     exit 1
 fi
