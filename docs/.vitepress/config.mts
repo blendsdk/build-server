@@ -7,6 +7,30 @@ export default defineConfig({
     'Self-hosted GitHub Actions runner fleet with an isolated Docker daemon inside every runner',
   cleanUrls: true,
   lastUpdated: true,
+  head: [
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: 'Build Server' }],
+    [
+      'meta',
+      {
+        property: 'og:description',
+        content:
+          'Self-hosted GitHub Actions runner fleet with an isolated Docker daemon inside every runner'
+      }
+    ],
+    [
+      'meta',
+      { property: 'og:image', content: 'https://blendsdk.github.io/build-server/social-preview.png' }
+    ],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    [
+      'meta',
+      {
+        name: 'twitter:image',
+        content: 'https://blendsdk.github.io/build-server/social-preview.png'
+      }
+    ]
+  ],
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
