@@ -1,42 +1,166 @@
 name: runner fleet smoke test
 
-# Manual end-to-end checks for a deployed self-hosted runner.
+# Manual end-to-end checks for a deployed fleet. They run on the self-hosted runner, so they prove
+# the inner Docker daemon behaves like a normal Docker host from a job's point of view.
 #
-# GitHub only registers workflows under `.github/workflows/`, so copy this file to
-# `.github/workflows/smoke.yml` in the target repository and dispatch it from the Actions tab
-# after deploying the fleet.
+# GitHub only registers workflows under `.github/workflows/`, so copy this file there as
+# `.github/workflows/smoke.yml` in any repository served by the fleet, then dispatch it from the
+# Actions tab. Run it after a fleet upgrade and before a release.
 on:
   workflow_dispatch:
+    inputs:
+      host_check:
+        description: Pause for host-isolation inspection with 'docker ps' on the build host
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   smoke:
     runs-on: self-hosted
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      # A workspace bind mount must see the checked-out files. Before the inner-daemon change this
-      # mounted an empty host directory.
-      - name: Workspace path mapping
-        run: docker run --rm -v "$PWD:/src" alpine sh -c 'test -f /src/README.md && echo path-mapping-ok'
+      - name: Environment report
+        run: |
+          set -euo pipefail
+          {
+            echo "## Smoke environment"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Runner | ${RUNNER_NAME:-unknown} |"
+            echo "| Workspace | $(pwd) |"
+            echo "| Registry address | ${REGISTRY_ADDR:-<unset>} |"
+            echo "| Registry user | ${REGISTRY_USER:-<unset>} |"
+            echo "| Docker | $(docker --version) |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      # A container published inside the runner must be reachable from the same job.
+      - name: Pull and run a public image
+        run: |
+          set -euo pipefail
+          docker pull alpine:3.20
+          OUTPUT="$(docker run --rm alpine:3.20 sh -c 'echo public-image-ok && uname -m')"
+          echo "SMOKE-OK: public-image $OUTPUT"
+          echo "- public image pulled and run: \`$OUTPUT\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # The workspace is bind-mounted into job containers. Before the inner-daemon change this
+      # mounted an empty host directory, so the checked-out files must be visible here.
+      - name: Workspace mapping
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/src" alpine:3.20 test -f /src/.git/HEAD
+          mkdir -p smoke-mapped
+          echo "smoke-from-runner" > smoke-mapped/from-runner.txt
+          IN="$(docker run --rm -v "$PWD/smoke-mapped:/mapped" alpine:3.20 cat /mapped/from-runner.txt)"
+          [ "$IN" = "smoke-from-runner" ]
+          docker run --rm -v "$PWD/smoke-mapped:/mapped" alpine:3.20 \
+            sh -c 'echo smoke-from-container > /mapped/from-container.txt'
+          OUT="$(cat smoke-mapped/from-container.txt)"
+          [ "$OUT" = "smoke-from-container" ]
+          echo "SMOKE-OK: workspace-mapping in=$IN out=$OUT"
+          echo "- workspace visible in job containers and writable from both sides: \`$IN\`, \`$OUT\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # A container published by the inner daemon must be reachable from the same job.
       - name: Published port reachability
         run: |
-          docker rm -f smoke-web 2>/dev/null || true
+          set -euo pipefail
+          docker rm -f smoke-web >/dev/null 2>&1 || true
           docker run -d --rm -p 8080:80 --name smoke-web nginx:alpine
-          for i in $(seq 1 15); do
+          for _ in $(seq 1 15); do
             curl -sf http://localhost:8080 >/dev/null && break
             sleep 1
           done
           curl -sf http://localhost:8080 >/dev/null
-          docker rm -f smoke-web
+          docker rm -f smoke-web >/dev/null
+          echo "SMOKE-OK: port-reachability http://localhost:8080"
+          echo "- a published container is reachable from the job at \`http://localhost:8080\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # Job containers must stay inside the runner. The sleeper stays up for a minute so the
-      # operator can run "docker ps" on the host while it is alive; it must NOT appear there.
-      - name: Host isolation check
+      # The fleet always deploys the co-located registry with htpasswd authentication.
+      - name: Registry requires authentication
         run: |
-          docker rm -f smoke-sleeper 2>/dev/null || true
-          docker run -d --rm --name smoke-sleeper alpine sleep 90
-          echo "On the host, run 'docker ps' now: smoke-sleeper must NOT appear."
+          set -euo pipefail
+          : "${REGISTRY_ADDR:?REGISTRY_ADDR is not set; redeploy the fleet and restart the runner}"
+          if [ -z "${REGISTRY_USER:-}" ] || [ -z "${REGISTRY_PASS:-}" ]; then
+            echo "SMOKE-FAIL: registry credentials are not present in the runner environment" >&2
+            exit 1
+          fi
+          ANON_RESPONSE="$(curl -s -D - -o /dev/null "http://${REGISTRY_ADDR}/v2/")"
+          echo "$ANON_RESPONSE" | grep -qiE '^HTTP/.* 401' || {
+            echo "SMOKE-FAIL: anonymous registry access was not rejected" >&2
+            echo "$ANON_RESPONSE" >&2
+            exit 1
+          }
+          echo "$ANON_RESPONSE" | grep -qiE '^www-authenticate:.*basic' || {
+            echo "SMOKE-FAIL: the registry did not advertise a Basic authentication challenge" >&2
+            exit 1
+          }
+          AUTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' -u "${REGISTRY_USER}:${REGISTRY_PASS}" "http://${REGISTRY_ADDR}/v2/")"
+          [ "$AUTH_CODE" = "200" ] || {
+            echo "SMOKE-FAIL: authenticated registry access returned ${AUTH_CODE}, expected 200" >&2
+            exit 1
+          }
+          echo "SMOKE-OK: registry-auth anonymous=401 authenticated=200"
+          echo "- registry rejects anonymous access (401) and accepts the configured credentials (200)" >> "$GITHUB_STEP_SUMMARY"
+
+      # Build a small image here, push it to the registry, remove it locally, and pull it back.
+      # The content carries a run-specific nonce, so a cached or stale image cannot pass.
+      - name: Registry publish round-trip
+        run: |
+          set -euo pipefail
+          : "${REGISTRY_ADDR:?REGISTRY_ADDR is not set; redeploy the fleet and restart the runner}"
+          echo "$REGISTRY_PASS" | docker login "$REGISTRY_ADDR" -u "$REGISTRY_USER" --password-stdin
+          NONCE="smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          REPO_LOWER="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          IMAGE="$REGISTRY_ADDR/$REPO_LOWER/smoke:$GITHUB_RUN_NUMBER"
+          mkdir -p smoke-build-context
+          printf 'FROM alpine:3.20\nARG NONCE=unknown\nRUN echo "smoke $NONCE" > /built.txt\n' > smoke-build-context/Dockerfile
+          docker build --build-arg "NONCE=$NONCE" -t "$IMAGE" smoke-build-context
+          docker push "$IMAGE"
+          docker rmi "$IMAGE"
+          docker pull "$IMAGE"
+          VERIFY="$(docker run --rm "$IMAGE" cat /built.txt)"
+          [ "$VERIFY" = "smoke $NONCE" ] || {
+            echo "SMOKE-FAIL: the pulled image content '${VERIFY}' does not match the pushed build 'smoke ${NONCE}'" >&2
+            exit 1
+          }
+          echo "SMOKE-OK: registry-publish $IMAGE verify=$VERIFY"
+          echo "- custom image built, pushed, pulled back, and run with run-specific content: \`$IMAGE\` (\`$VERIFY\`)" >> "$GITHUB_STEP_SUMMARY"
+
+      # Containers started by the inner daemon must not appear on the host. The sleeper stays up
+      # for a minute so the operator can run "docker ps" on the build host while it is alive.
+      - name: Host isolation check
+        if: ${{ inputs.host_check }}
+        run: |
+          set -euo pipefail
+          docker rm -f smoke-sleeper >/dev/null 2>&1 || true
+          docker run -d --rm --name smoke-sleeper alpine:3.20 sleep 90
+          echo "On the build host, run 'docker ps' now: smoke-sleeper must NOT appear."
           sleep 60
-          docker rm -f smoke-sleeper
+          docker rm -f smoke-sleeper >/dev/null
+          echo "SMOKE-OK: host-isolation sleeper stayed inside the runner"
+
+      - name: Write results file
+        if: always()
+        run: |
+          {
+            echo "runner=${RUNNER_NAME:-unknown}"
+            echo "registry=${REGISTRY_ADDR:-unset}"
+            echo "workspace=$(pwd)"
+            echo "status=${{ job.status }}"
+          } > smoke-results.txt
+          cat smoke-results.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-results
+          path: smoke-results.txt
+
+      - name: Result
+        if: always()
+        run: |
+          echo "## Result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

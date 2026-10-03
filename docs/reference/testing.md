@@ -52,5 +52,19 @@ npm run docs:dev       # live preview
 
 ## Manual end-to-end
 
-`test/smoke-workflow.yml` checks a deployed runner: workspace bind mounts, `localhost` ports, and
-host isolation. Copy it into `.github/workflows/` of a repository and dispatch it manually.
+`test/smoke-workflow.yml` is the smoke suite for a deployed fleet. Copy it to
+`.github/workflows/smoke.yml` in any repository served by the fleet and dispatch it from the
+Actions tab — run it after a fleet upgrade and before a release.
+
+It verifies, in order:
+
+1. an environment report (runner, registry address, Docker version);
+2. a public image is pulled and run;
+3. the checked-out workspace is visible in job containers and writable from both sides;
+4. a container published by the inner daemon is reachable from the job at `localhost`;
+5. the registry rejects anonymous access and accepts the configured credentials;
+6. a custom image is built, pushed, pulled back, and run with run-specific content;
+7. host isolation (optional): dispatch with the `host_check` input enabled to pause while you
+   run `docker ps` on the build host — the job's sleeper container must not appear.
+
+Results are written to the step summary and uploaded as the `smoke-results` artifact.

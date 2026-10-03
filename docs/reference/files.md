@@ -18,8 +18,8 @@
 | `.env` | Host secrets: `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET` |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json` | Host credentials baked into the image |
 | `ssh/` | Staged by `fleet.sh build` from `~/.ssh` |
-| `examples/` | Offline playground and smoke-test recipe |
-| `test/` | Specification and implementation tests, `verify.sh` |
+| `examples/` | Offline playground with stub `docker`/`curl` |
+| `test/` | Specification and implementation tests, `smoke-workflow.yml`, `verify.sh` |
 | `docs/` | This VitePress site |
 
 ## Environment variables
