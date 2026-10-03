@@ -51,6 +51,10 @@ UNPRIVILEGED="$(jq "${RUNNER_FILTER} | map(select(.value.privileged != true)) | 
 OTHER_PRIVILEGED="$(jq '[.services | to_entries[] | select((.value.image | startswith("runner-image")) | not) | select(.value.privileged == true)] | length' "${MODEL}")"
 [ "${OTHER_PRIVILEGED}" -eq 0 ] || fail "only runner services may be privileged"
 
+# Runner images are built locally; Compose must never pull them from a registry.
+PULL_POLICY="$(jq '[.services | to_entries[] | select(.value.image | startswith("runner-image")) | select(.value.pull_policy != "never")] | length' "${MODEL}")"
+[ "${PULL_POLICY}" -eq 0 ] || fail "runner services must declare pull_policy: never"
+
 # Organization to hostname mapping is slug-derived and matches orgs.conf.
 EXPECTED_MAPPING="$(
     awk '/^[A-Za-z0-9._-]+/ { slug=tolower($1); gsub(/[^a-z0-9]/, "", slug); print $1 "=" slug "_runner_1/" slug "_runner_1" }' orgs.conf | sort

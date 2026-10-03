@@ -7,7 +7,12 @@
 #
 # Usage:
 #   curl -fsSL <raw bootstrap.sh url> | bash -s -- [--no-start] [--non-interactive]
-#   ... [--ssh | --generate-ssh-key | --token]
+#   ... [--ssh | --generate-ssh-key | --token] [--orgs "OrgA OrgB"] [--keep-orgs]
+#
+# Organizations:
+#   bootstrap asks for the organizations to serve and verifies each by minting a registration
+#   token (the same permission the fleet needs). Use --orgs "OrgA OrgB" for unattended installs,
+#   or --keep-orgs to leave an existing orgs.conf untouched.
 #
 # Repository access (default --token):
 #   --token              clone over HTTPS using ACCESS_TOKEN (default)
@@ -32,6 +37,7 @@
 #   BRANCH                  branch to check out (default: main)
 #   GIT_AUTH                token (default) or ssh; flags win over the variable
 #   SSH_KEY                 SSH key used for the checkout (default: $HOME/.ssh/id_rsa)
+#   ORGS                    space- or comma-separated organizations for the fleet
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/blendsdk/build-server.git}"
@@ -42,12 +48,15 @@ GIT_AUTH="${GIT_AUTH:-token}"
 GENERATE_SSH_KEY=0
 SSH_KEY="${SSH_KEY:-${HOME}/.ssh/id_rsa}"
 REPO_SSH_URL="${REPO_SSH_URL:-}"
+ORGS="${ORGS:-}"
+KEEP_ORGS=0
 START=1
 NONINTERACTIVE=0
 
 usage() {
     cat <<'EOF'
 Usage: bootstrap.sh [--no-start] [--non-interactive] [--token | --ssh | --generate-ssh-key]
+                    [--orgs "OrgA OrgB"] [--keep-orgs]
 
   --no-start         install and configure only; do not build or start the fleet
   --non-interactive  never prompt; required values must come from the environment
@@ -55,6 +64,8 @@ Usage: bootstrap.sh [--no-start] [--non-interactive] [--token | --ssh | --genera
   --ssh              clone over SSH using an existing key (SSH_KEY)
   --generate-ssh-key generate SSH_KEY when missing, install the public key on GitHub,
                      then clone over SSH
+  --orgs "A B"       organizations to serve; each is verified against GitHub
+  --keep-orgs        keep the existing orgs.conf and skip the organization prompt
 EOF
 }
 
@@ -68,6 +79,12 @@ while [ "$#" -gt 0 ]; do
             GIT_AUTH=ssh
             GENERATE_SSH_KEY=1
             ;;
+        --orgs)
+            [ "$#" -ge 2 ] || die "--orgs requires a value"
+            ORGS="$2"
+            shift
+            ;;
+        --keep-orgs) KEEP_ORGS=1 ;;
         -h | --help)
             usage
             exit 0
@@ -194,6 +211,64 @@ prepare_known_hosts() {
     fi
 }
 
+# Verify that the token can manage runners for an organization by minting a registration token
+# (the exact permission the fleet needs).
+validate_org() {
+    local org="$1" response code
+    response="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+        -H "Authorization: token ${ACCESS_TOKEN}" \
+        -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/orgs/${org}/actions/runners/registration-token" || true)"
+    code="${response##*$'\n'}"
+    case "${code}" in
+        201) return 0 ;;
+        401) die "ACCESS_TOKEN is invalid or expired (while verifying '${org}')" ;;
+        403) die "the token lacks runner admin for '${org}' (classic: admin:org)" ;;
+        404) die "organization '${org}' not found or not visible to the token" ;;
+        *) die "could not verify organization '${org}' (HTTP ${code})" ;;
+    esac
+}
+
+# Ask for (or accept) the organizations and write orgs.conf after validating each one.
+configure_orgs() {
+    local current org
+    if [ "${KEEP_ORGS}" = "1" ]; then
+        say "keeping the existing orgs.conf"
+        return
+    fi
+
+    if [ -z "${ORGS}" ]; then
+        if [ "${NONINTERACTIVE}" = "1" ] || [ ! -r /dev/tty ]; then
+            die "ORGS is required (space-separated organization names), or pass --keep-orgs"
+        fi
+        current="$(awk '/^[A-Za-z0-9._-]+/ { printf "%s ", $1 }' orgs.conf 2>/dev/null || true)"
+        prompt_var ORGS "Organizations for this build server (space separated; current: ${current:-none})"
+        if [ -z "${ORGS}" ]; then
+            if grep -q 'Example runner fleet' orgs.conf 2>/dev/null; then
+                die "enter at least one organization"
+            fi
+            say "keeping the existing orgs.conf"
+            return
+        fi
+    fi
+
+    ORGS="${ORGS//,/ }"
+    for org in ${ORGS}; do
+        [[ "${org}" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid organization name '${org}'"
+        validate_org "${org}"
+        say "verified organization ${org}"
+    done
+
+    {
+        echo "# Runner fleet — edit and run ./fleet.sh up to apply changes."
+        echo "# Format: <name> [url=...] [context=...] [build_temp=1]"
+        for org in ${ORGS}; do
+            echo "${org}"
+        done
+    } >orgs.conf
+    say "wrote orgs.conf with: ${ORGS}"
+}
+
 # --- prerequisites -----------------------------------------------------------
 install_pkg git git
 install_pkg curl curl
@@ -260,6 +335,9 @@ else
 fi
 cd "${INSTALL_DIR}"
 
+# --- organizations -----------------------------------------------------------------
+configure_orgs
+
 # --- host configuration ---------------------------------------------------------
 if [ ! -f .env ]; then
     umask 077
@@ -309,17 +387,22 @@ fi
 
 # --- start ----------------------------------------------------------------------
 # Docker group membership only applies to new shell sessions; try `sg` before giving up.
+docker_ok() { docker info >/dev/null 2>&1; }
+docker_via_sg() {
+    command -v sg >/dev/null 2>&1 && sg docker -c "docker info" >/dev/null 2>&1
+}
+
 run_fleet() {
-    if docker info >/dev/null 2>&1; then
+    if docker_ok; then
         ./fleet.sh "$@"
-    elif command -v sg >/dev/null 2>&1 && sg docker -c "docker info" >/dev/null 2>&1; then
+    elif docker_via_sg; then
         local quoted="./fleet.sh" arg
         for arg in "$@"; do
             quoted+=" $(printf '%q' "${arg}")"
         done
         sg docker -c "${quoted}"
     else
-        return 1
+        return 127
     fi
 }
 
@@ -328,10 +411,18 @@ if [ "${START}" = "0" ]; then
     exit 0
 fi
 
-if ! run_fleet build || ! run_fleet up; then
+if ! docker_ok && ! docker_via_sg; then
     say "Docker is installed but not accessible in this shell."
     say "Log out and back in, then run: cd ${INSTALL_DIR} && ./fleet.sh build && ./fleet.sh up"
     exit 0
 fi
+
+run_fleet build || die "./fleet.sh build failed; see the output above"
+while read -r org; do
+    [ -n "${org}" ] || continue
+    say "building custom image for ${org}"
+    run_fleet build "${org}" || die "./fleet.sh build ${org} failed; see the output above"
+done < <(awk '/^[A-Za-z0-9._-]+/ { for (i = 2; i <= NF; i++) if ($i ~ /^context=/) print $1 }' orgs.conf)
+run_fleet up || die "./fleet.sh up failed; see the output above"
 
 say "fleet started. Check it with: cd ${INSTALL_DIR} && ./fleet.sh status"

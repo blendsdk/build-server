@@ -165,6 +165,7 @@ render_compose() {
             cat <<EOF
   ${slug}_1:
     image: ${image}
+    pull_policy: never
     hostname: ${slug}_runner_1
     container_name: ${slug}_runner_1
     restart: unless-stopped
@@ -348,6 +349,22 @@ update_runners() {
     compose up -d
 }
 
+# Fail fast with a clear message when a runner image has not been built locally.
+require_images() {
+    local i slug image
+    for i in "${!ORG_NAMES[@]}"; do
+        slug="${ORG_SLUGS[$i]}"
+        image="runner-image"
+        [ -z "${ORG_CONTEXTS[$i]}" ] || image="runner-image-${slug}"
+        if ! docker image inspect "${image}" >/dev/null 2>&1; then
+            if [ -z "${ORG_CONTEXTS[$i]}" ]; then
+                die "image '${image}' is missing; run './fleet.sh build'"
+            fi
+            die "image '${image}' is missing; run './fleet.sh build ${ORG_NAMES[$i]}'"
+        fi
+    done
+}
+
 COMMAND="${1:-}"
 
 case "${COMMAND}" in
@@ -377,6 +394,7 @@ case "${COMMAND}" in
     up)
         parse_config
         render_compose
+        require_images
         compose up -d
         ;;
     down)
@@ -397,6 +415,7 @@ case "${COMMAND}" in
     restart)
         parse_config
         render_compose
+        require_images
         compose down --remove-orphans
         compose up -d
         ;;

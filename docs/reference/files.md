@@ -32,6 +32,7 @@
 | `RUNNER_EMAIL_DOMAIN` | start.sh | Domain for the runner's git identity email (default `users.noreply.github.com`) |
 | `INSTALL_DIR`, `REPO_URL`, `BRANCH` | bootstrap | Checkout location and source |
 | `GIT_AUTH`, `SSH_KEY`, `REPO_SSH_URL` | bootstrap | Checkout auth mode (`token`/`ssh`), key path, and explicit SSH URL — see [Getting started](/guide/getting-started#repository-access) |
+| `ORGS` | bootstrap | Space- or comma-separated organizations; validated before `orgs.conf` is written |
 | `ORGANIZATION`, `GITHUB_URL`, `GITHUB_API_URL` | start.sh | Per-runner registration scope (set by the generator) |
 
 ## Generated service environment

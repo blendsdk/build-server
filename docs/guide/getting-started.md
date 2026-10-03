@@ -30,7 +30,10 @@ Useful flags and variables:
 | `--token` | Clone over HTTPS using `ACCESS_TOKEN` (default) |
 | `--ssh` | Clone over SSH using an existing key (`SSH_KEY`, default `~/.ssh/id_rsa`) |
 | `--generate-ssh-key` | Generate the key when missing, install the public key on GitHub, then clone over SSH |
+| `--orgs "A B"` | Organizations to serve; each is verified against GitHub. Interactive installs are prompted |
+| `--keep-orgs` | Keep the existing `orgs.conf` and skip the prompt |
 | `ACCESS_TOKEN` | GitHub token (required — also used for runner registration) |
+| `ORGS` | Space- or comma-separated organization names (unattended equivalent of `--orgs`) |
 | `REGISTRY_USER`, `REGISTRY_PASS` | Registry credentials (`ci` and a generated password by default) |
 | `REGISTRY_HTTP_SECRET` | Registry signing secret (generated when absent) |
 | `INSTALL_DIR` | Checkout location (default `$HOME/build-server`) |
@@ -39,6 +42,10 @@ Useful flags and variables:
 | `REPO_SSH_URL` | Explicit SSH URL when it differs from the `REPO_URL` derivation |
 
 Re-run the same command any time to update the checkout and fleet.
+
+The installer asks which organizations to serve and verifies each by minting a runner registration
+token — the same permission the fleet needs. It then writes `orgs.conf`, builds the default image
+**and every custom-context image**, and starts the fleet.
 
 ## Repository access
 

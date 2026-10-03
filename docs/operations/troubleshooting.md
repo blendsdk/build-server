@@ -14,6 +14,7 @@ Common causes:
 | `Docker daemon failed to start` | The inner `dockerd` cannot start (host kernel/storage driver) | Check the printed daemon log; try `vfs` storage if nested overlay fails |
 | `context ... has no Dockerfile` | Bad `context=` in `orgs.conf` | Fix the path; see [Organizations](/guide/organizations) |
 | `already exists; remove the leftover staging directory` | A killed build left `.fleet-build/` or `./ssh` | `rm -rf .fleet-build ./ssh` and rebuild |
+| `image 'runner-image-<slug>' is missing` or `pull access denied for runner-image-<slug>` | The custom-context image was never built; it is local-only and never pulled | `./fleet.sh build <org>` (or `./fleet.sh update-runners`), then `./fleet.sh up` |
 
 ## Jobs cannot reach the registry
 

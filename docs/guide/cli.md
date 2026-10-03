@@ -37,6 +37,19 @@
 The version used for builds is, in order: `.runner-version`, then the Dockerfile `ARG
 RUNNER_VERSION`. `update-runners` writes `.runner-version` only after every build succeeds.
 
+## Images are local-only
+
+Runner images (`runner-image`, `runner-image-<slug>`) are built locally and generated services
+declare `pull_policy: never`, so Compose never tries to pull them from a registry. `up` and
+`restart` check the images first and stop with a precise message instead of a registry error:
+
+```
+image 'runner-image-initech' is missing; run './fleet.sh build Initech'
+```
+
+Build the default image once (`./fleet.sh build`) and each custom-context image after adding a
+`context=` to `orgs.conf` (`./fleet.sh build <org>`). `update-runners` builds them all.
+
 ## Operational notes
 
 - `update <org>` and `update-runners` recreate containers and kill any job running on the affected

@@ -22,7 +22,7 @@ new_sandbox() {
     printf 'ARG RUNNER_VERSION="1.2.3"\n' > "${dir}/Dockerfile"
     printf 'services: {}\n' > "${dir}/docker-compose.yml"
     # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
-    printf '#!/bin/bash\nprintf "docker %%s\\n" "$*" >> "${TRACE}"\nexit "${DOCKER_EXIT:-0}"\n' \
+    printf '#!/bin/bash\nprintf "docker %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"image inspect"*) exit "${IMAGE_INSPECT_EXIT:-0}" ;;\nesac\nexit "${DOCKER_EXIT:-0}"\n' \
         > "${dir}/bin/docker"
     # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
     printf '#!/bin/bash\nprintf "curl %%s\\n" "$*" >> "${TRACE}"\nprintf "%%s" "${CURL_BODY:-}"\nprintf "\\n%%s" "${CURL_HTTP_CODE:-200}"\nexit "${CURL_EXIT:-0}"\n' \
@@ -40,7 +40,8 @@ run_fleet() {
     shift
     (cd "${dir}" && HOME="${dir}/home" ACCESS_TOKEN=dummy TRACE="${dir}/trace" \
         PATH="${dir}/bin:${PATH}" CURL_BODY="${CURL_BODY:-}" CURL_EXIT="${CURL_EXIT:-0}" \
-        CURL_HTTP_CODE="${CURL_HTTP_CODE:-200}" DOCKER_EXIT="${DOCKER_EXIT:-0}" bash fleet.sh "$@")
+        CURL_HTTP_CODE="${CURL_HTTP_CODE:-200}" DOCKER_EXIT="${DOCKER_EXIT:-0}" \
+        IMAGE_INSPECT_EXIT="${IMAGE_INSPECT_EXIT:-0}" bash fleet.sh "$@")
 }
 
 # --- update-runners: default first, version arg everywhere, state written after builds -----
@@ -107,6 +108,18 @@ case "${UP_COMPOSE}" in
 esac
 [ "$(grep -c 'down --remove-orphans' "${S}/trace")" -eq 2 ] || fail "down and restart must both remove orphans"
 echo "PASS: lifecycle commands map correctly and only down/restart remove orphans"
+
+# --- up refuses to start when a runner image has not been built locally ---------------------
+S="${T}/missing-image"
+new_sandbox "${S}"
+set +e
+IMAGE_INSPECT_EXIT=1 run_fleet "${S}" up >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "up must fail when a runner image is missing"
+grep -qi 'missing' "${S}/out" || fail "missing-image error not shown"
+grep -q 'fleet.sh build' "${S}/out" || fail "missing-image error should name the build command"
+echo "PASS: up rejects missing local images with guidance"
 
 # --- generate-first and merged -f flags on every compose command ---------------------------
 S="${T}/generate-first"

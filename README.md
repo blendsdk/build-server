@@ -29,8 +29,10 @@ On a fresh Ubuntu host:
 curl -fsSL https://raw.githubusercontent.com/blendsdk/build-server/main/bootstrap.sh | bash -s --
 ```
 
-Add `--ssh` to clone with your existing SSH key, or `--generate-ssh-key` to create and register a
-new one. Or manually:
+The installer asks for your GitHub token and the organizations to serve (each verified against
+GitHub), builds the runner image plus any custom-context images, and starts the fleet. Add `--ssh`
+to clone with your existing SSH key, or `--generate-ssh-key` to create and register a new one. Or
+manually:
 
 ```bash
 git clone https://github.com/blendsdk/build-server.git

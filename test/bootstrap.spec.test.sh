@@ -49,7 +49,9 @@ EOF
     cat > "${bin}/curl" <<'EOF'
 #!/bin/bash
 printf 'curl %s\n' "$*" >> "${TRACE}"
-exit 0
+printf '%s' "${CURL_BODY:-}"
+printf '\n%s' "${CURL_HTTP_CODE:-200}"
+exit "${CURL_EXIT:-0}"
 EOF
 
     cat > "${bin}/htpasswd" <<'EOF'
@@ -102,11 +104,13 @@ EOF
     chmod +x "${bin}/"*
 }
 
-# Run the installer against the stubs.
+# Run the installer against the stubs. Tests that need no organizations pass ORGS= (empty) and
+# tests that need a custom-context build use --keep-orgs.
 run_bootstrap() {
     local home="$1" dir="$2"
     shift 2
     (cd "${T}" && HOME="${home}" INSTALL_DIR="${dir}" TRACE="${T}/trace" \
+        ORGS="${ORGS:-ExampleOrg}" CURL_HTTP_CODE="${CURL_HTTP_CODE:-201}" \
         PATH="${T}/bin:${PATH}" bash "${ROOT}/bootstrap.sh" --non-interactive "$@")
 }
 
@@ -237,5 +241,75 @@ set -e
 [ "${CODE}" -ne 0 ] || fail "SSH mode without a key must fail"
 grep -q -- '--generate-ssh-key' "${T}/out-nokey" || fail "missing-key error should mention --generate-ssh-key"
 echo "PASS: SSH without a key fails with guidance"
+
+# --- Organizations are required and validated -----------------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-noorgs" "${T}/install-noorgs"
+set +e
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    HOME="${T}/home-noorgs" INSTALL_DIR="${T}/install-noorgs" TRACE="${T}/trace" \
+    CURL_HTTP_CODE=201 PATH="${T}/bin:${PATH}" bash "${ROOT}/bootstrap.sh" \
+    --non-interactive --no-start >"${T}/out-noorgs" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "missing organizations must fail in non-interactive mode"
+grep -q 'ORGS' "${T}/out-noorgs" || fail "missing-organizations error should mention ORGS"
+echo "PASS: organizations are required in non-interactive mode"
+
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-badorg" "${T}/install-badorg"
+: > "${T}/trace"
+set +e
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    ORGS=GhostOrg CURL_HTTP_CODE=404 run_bootstrap "${T}/home-badorg" "${T}/install-badorg" --no-start \
+    >"${T}/out-badorg" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "an unknown organization must fail validation"
+grep -q 'GhostOrg' "${T}/out-badorg" || fail "validation error should name the organization"
+echo "PASS: unknown organizations fail validation"
+
+# --- Custom-context images are built before starting -----------------------------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-ctx" "${T}/install-ctx/.git"
+printf 'RegisteredOrg\nInitech context=examples/runner-custom\n' > "${T}/install-ctx/orgs.conf"
+cat > "${T}/install-ctx/fleet.sh" <<'EOF'
+#!/bin/bash
+printf 'fleet %s\n' "$*" >> "${TRACE}"
+exit 0
+EOF
+chmod +x "${T}/install-ctx/fleet.sh"
+: > "${T}/trace"
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-ctx" "${T}/install-ctx" --keep-orgs >"${T}/out-ctx" 2>&1 ||
+    {
+        cat "${T}/out-ctx" >&2
+        fail "bootstrap with a custom context should succeed"
+    }
+grep -q '^fleet build$' "${T}/trace" || fail "default image must be built"
+grep -q '^fleet build Initech$' "${T}/trace" || fail "custom-context image must be built"
+grep -q '^fleet up$' "${T}/trace" || fail "fleet must start after the builds"
+echo "PASS: custom-context images are built before starting"
+
+# --- A fleet failure is reported as such, not as a docker-access problem ---------------------
+make_stubs "${T}/bin"
+mkdir -p "${T}/home-fail" "${T}/install-fail/.git"
+cat > "${T}/install-fail/fleet.sh" <<'EOF'
+#!/bin/bash
+printf 'fleet %s\n' "$*" >> "${TRACE}"
+if [ "${1:-}" = "up" ]; then exit 1; fi
+exit 0
+EOF
+chmod +x "${T}/install-fail/fleet.sh"
+: > "${T}/trace"
+set +e
+ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_PASS=secret-pass \
+    run_bootstrap "${T}/home-fail" "${T}/install-fail" >"${T}/out-fail" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "a failing fleet start must fail the installer"
+grep -q 'up failed' "${T}/out-fail" || fail "the actual command failure should be reported"
+grep -q 'not accessible' "${T}/out-fail" && fail "must not blame docker access for a command failure"
+echo "PASS: fleet command failures are reported accurately"
 
 echo "bootstrap spec tests: PASS"

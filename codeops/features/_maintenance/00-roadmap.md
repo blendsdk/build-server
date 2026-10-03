@@ -3,7 +3,7 @@
 > **Feature-Set**: Maintenance
 > **Status**: In Progress
 > **Created**: 2026-10-03
-> **Last Updated**: 2026-10-03 14:20
+> **Last Updated**: 2026-10-03 14:45
 > **Progress**: n/a
 > **CodeOps Artifact Schema**: 1
 
@@ -16,3 +16,4 @@
 | ID | Title | RD | Plan | Stage | Status | Last Updated | Depends-on / Blocker |
 |----|-------|----|------|-------|--------|--------------|----------------------|
 | T-01 | Bootstrap SSH clone support | — | [bootstrap-ssh-auth](plans/bootstrap-ssh-auth/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
+| T-02 | Bootstrap organizations and image handling | — | [bootstrap-orgs-images](plans/bootstrap-orgs-images/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
