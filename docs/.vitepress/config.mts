@@ -44,6 +44,7 @@ export default defineConfig({
           text: 'Guide',
           items: [
             { text: 'Getting started', link: '/guide/getting-started' },
+            { text: 'GitHub token', link: '/guide/github-token' },
             { text: 'Organizations', link: '/guide/organizations' },
             { text: 'Admin CLI', link: '/guide/cli' },
             { text: 'Custom images', link: '/guide/custom-images' },

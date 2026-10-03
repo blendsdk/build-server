@@ -34,7 +34,7 @@ Or manually:
 ```bash
 git clone https://github.com/blendsdk/build-server.git
 cd build-server
-cp .env.example .env          # set ACCESS_TOKEN and REGISTRY_HTTP_SECRET
+cp .env.example .env          # set ACCESS_TOKEN (see the token guide) and REGISTRY_HTTP_SECRET
 ./fleet.sh build              # build the runner image
 ./fleet.sh up                 # start the registry and one runner per organization
 ./fleet.sh status
@@ -46,7 +46,8 @@ stubbed commands.
 ## Documentation
 
 Full documentation lives at **https://blendsdk.github.io/build-server/** — start with the
-[getting started guide](https://blendsdk.github.io/build-server/guide/getting-started) and the
+[getting started guide](https://blendsdk.github.io/build-server/guide/getting-started), create a
+[GitHub token](https://blendsdk.github.io/build-server/guide/github-token), then read the
 [architecture overview](https://blendsdk.github.io/build-server/architecture/overview).
 
 ## Security

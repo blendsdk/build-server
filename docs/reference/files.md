@@ -26,7 +26,7 @@
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
-| `ACCESS_TOKEN` | bootstrap, start.sh, update-runners | GitHub token with runner admin for the configured organizations |
+| `ACCESS_TOKEN` | bootstrap, start.sh, update-runners | GitHub token with runner admin for the configured organizations — see [GitHub token](/guide/github-token) |
 | `REGISTRY_USER` / `REGISTRY_PASS` | bootstrap, htpasswd | Registry credentials |
 | `REGISTRY_HTTP_SECRET` | registry service | Registry signing secret |
 | `RUNNER_EMAIL_DOMAIN` | start.sh | Domain for the runner's git identity email (default `users.noreply.github.com`) |

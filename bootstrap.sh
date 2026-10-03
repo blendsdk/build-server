@@ -9,7 +9,13 @@
 #   curl -fsSL <raw bootstrap.sh url> | bash -s -- [--no-start] [--non-interactive]
 #
 # Environment overrides:
-#   ACCESS_TOKEN            required GitHub token with runner admin on every org in orgs.conf
+#   ACCESS_TOKEN            required: a token that can manage self-hosted runners for every
+#                           organization in orgs.conf. Recommended: a classic PAT with the
+#                           admin:org scope (Settings > Developer settings > Personal access
+#                           tokens > Tokens (classic)); authorize it for each org that uses
+#                           SAML SSO. A fine-grained token ("Self-hosted runners: Read and
+#                           write") works for a single organization only.
+#                           Guide: https://blendsdk.github.io/build-server/guide/github-token
 #   REGISTRY_USER           registry user (default: ci)
 #   REGISTRY_PASS           registry password (generated and reported when absent)
 #   REGISTRY_HTTP_SECRET    registry signing secret (generated when absent)
@@ -105,7 +111,7 @@ fi
 
 # --- secrets -----------------------------------------------------------------
 if [ -z "${ACCESS_TOKEN:-}" ]; then
-    prompt_var ACCESS_TOKEN "GitHub token with runner admin on every org in orgs.conf" secret
+    prompt_var ACCESS_TOKEN "GitHub token with runner admin on every org in orgs.conf (classic PAT with admin:org - see docs/guide/github-token)" secret
 fi
 [ -n "${ACCESS_TOKEN}" ] || die "ACCESS_TOKEN must not be empty"
 

@@ -4,7 +4,9 @@
 
 - A Linux host (Ubuntu-based recommended) with Docker and the Compose plugin
 - `git`, `curl`, `jq`, `shellcheck`, and `htpasswd` (the bootstrap installs them when missing)
-- A GitHub token that can manage runners for every organization in `orgs.conf`
+- A GitHub token that can manage runners for every organization in `orgs.conf` — see
+  [GitHub token](/guide/github-token) for how to create one (classic PAT with `admin:org`, or a
+  fine-grained token for a single organization)
 
 ## One-command install
 

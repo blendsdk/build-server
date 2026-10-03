@@ -26,7 +26,8 @@ To exercise a real runner end to end, use a **temporary, non-production test org
 the production organizations.
 
 1. Point the registry and token at the test setup. Copy `.env.example` to `.env`, set
-   `ACCESS_TOKEN` to a token that can manage that organization's runners, and set
+   `ACCESS_TOKEN` to a token that can manage that organization's runners (see the
+   [GitHub token guide](https://blendsdk.github.io/build-server/guide/github-token)), and set
    `REGISTRY_HTTP_SECRET`.
 2. Make sure the host credential files exist in the repository root (`.npmrc`, `.yarnrc`,
    `.bunfig.toml`, `config.json`) and prepare `registry/auth/registry.password` (see the main
