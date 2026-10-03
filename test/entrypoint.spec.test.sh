@@ -26,6 +26,10 @@ EOF
 cat > "${T}/bin/docker" <<'EOF'
 #!/bin/bash
 echo "docker $*" >> "${TRACE}"
+case "$1" in
+    import) exit 0 ;;
+    run) exit "${DOCKER_RUN_EXIT:-0}" ;;
+esac
 exit "${DOCKER_INFO_EXIT:-0}"
 EOF
 
@@ -86,6 +90,24 @@ grep -q -- '--insecure-registry reg-a.example:5000' "${TRACE}" || fail "first cu
 grep -q -- '--insecure-registry reg-b.example:5000' "${TRACE}" || fail "second custom registry missing"
 grep -q -- '--insecure-registry registry:5000' "${TRACE}" && fail "default registry must be replaced by the override"
 echo "PASS: custom insecure registries are passed to the daemon"
+
+# When the default storage driver cannot run containers, restart with vfs on a fresh data root.
+export TRACE="${T}/trace-fallback"
+: > "${TRACE}"
+mkdir -p "${T}/docker-data"
+echo "stale" > "${T}/docker-data/stale"
+DOCKERD_LOG="${T}/dockerd-fallback.log" DOCKER_READY_ATTEMPTS=3 DOCKER_INFO_EXIT=0 \
+    DOCKER_RUN_EXIT=125 DOCKER_DATA_ROOT="${T}/docker-data" \
+    PATH="${T}/bin:${PATH}" bash "${ENTRY}" >"${T}/out-fallback" 2>&1 ||
+    {
+        cat "${T}/out-fallback" >&2
+        fail "entrypoint should recover with the vfs fallback"
+    }
+[ "$(grep -c 'dockerd-start' "${TRACE}")" -eq 2 ] || fail "daemon must be restarted exactly once"
+grep -q -- '--storage-driver vfs' "${TRACE}" || fail "fallback must use the vfs driver"
+grep -qi 'falling back to vfs' "${T}/out-fallback" || fail "the fallback should be reported"
+[ ! -e "${T}/docker-data/stale" ] || fail "the old data root must be cleared before the fallback"
+echo "PASS: the entrypoint falls back to vfs when container mounts are unsupported"
 
 # The runner's exit status is propagated by the supervisor.
 export TRACE="${T}/trace-status"

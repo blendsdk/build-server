@@ -41,6 +41,10 @@ Each runner therefore starts its own `dockerd`:
 - the host daemon and socket stay untouched;
 - image layers and build caches live per runner and survive between jobs (runners are persistent).
 
+At boot the entrypoint verifies the daemon can actually mount a container filesystem; on hosts
+that forbid nested overlay mounts it restarts with the `vfs` storage driver and logs a warning
+(pin `DOCKERD_STORAGE_DRIVER` to skip detection).
+
 Trade-offs: runners are privileged, and each keeps its own image cache and consumes memory/disk
 even while idle.
 

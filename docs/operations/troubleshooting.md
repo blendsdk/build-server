@@ -16,6 +16,7 @@ Common causes:
 | `already exists; remove the leftover staging directory` | A killed build left `.fleet-build/` or `./ssh` | `rm -rf .fleet-build ./ssh` and rebuild |
 | `image 'runner-image-<slug>' is missing` or `pull access denied for runner-image-<slug>` | The custom-context image was never built; it is local-only and never pulled | `./fleet.sh build <org>` (or `./fleet.sh update-runners`), then `./fleet.sh up` |
 | `Bind for 0.0.0.0:5000 failed: port is already allocated` | Another service on the host already uses the registry's host port | Set `REGISTRY_PORT=<free port>` in `.env` and rerun `./fleet.sh up`; a fresh `bootstrap.sh` install picks a free port automatically |
+| `failed to mount .../containerd-mount…: ... invalid argument` | The host cannot nest the default overlay storage driver inside the runner container | The entrypoint detects this at boot and falls back to `vfs` with a warning (containers run, slower storage); pin `DOCKERD_STORAGE_DRIVER=vfs` in `.env` to skip detection, or investigate the host filesystem |
 
 ## Jobs cannot reach the registry
 

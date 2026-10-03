@@ -179,6 +179,7 @@ render_compose() {
       - REGISTRY_USER=\${REGISTRY_USER:-}
       - REGISTRY_PASS=\${REGISTRY_PASS:-}
       - INSECURE_REGISTRIES=\${INSECURE_REGISTRIES-registry:5000}
+      - DOCKERD_STORAGE_DRIVER=\${DOCKERD_STORAGE_DRIVER:-}
 EOF
             if [ "${build_temp}" = "1" ]; then
                 cat <<EOF

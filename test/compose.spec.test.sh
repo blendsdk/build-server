@@ -76,6 +76,7 @@ OTHER_SECRETS="$(jq '[.services | to_entries[] | select(.key != "registry") | se
 
 # Runner services receive the co-located registry address and credentials for docker push.
 REGISTRY_USER=dummy-user REGISTRY_PASS=dummy-pass REGISTRY_ADDR=registry:5000 \
+    DOCKERD_STORAGE_DRIVER=vfs \
     ACCESS_TOKEN=dummy-token REGISTRY_HTTP_SECRET=dummy-secret \
     docker compose -f docker-compose.yml -f docker-compose.generated.yml config --format json \
     >"${T}/model-registry.json" 2>"${T}/config-registry.err" ||
@@ -92,6 +93,8 @@ REGISTRY_MODEL="${T}/model-registry.json"
     fail "REGISTRY_PASS was not injected into runner services"
 [ "$(jq -r '.services.acmetools_1.environment.INSECURE_REGISTRIES' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
     fail "INSECURE_REGISTRIES default missing from runner services"
+[ "$(jq -r '.services.acmetools_1.environment.DOCKERD_STORAGE_DRIVER' "${REGISTRY_MODEL}")" = "vfs" ] ||
+    fail "DOCKERD_STORAGE_DRIVER override was not injected"
 
 # The registry host port is configurable; runners use registry:5000 regardless.
 DEFAULT_PORT="$(jq -r '.services.registry.ports[0].published' "${MODEL}")"
