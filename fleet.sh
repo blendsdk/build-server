@@ -175,6 +175,10 @@ render_compose() {
       - ACCESS_TOKEN=\${ACCESS_TOKEN}
       - GITHUB_URL=${url}
       - GITHUB_API_URL=${api}
+      - REGISTRY_ADDR=\${REGISTRY_ADDR:-registry:5000}
+      - REGISTRY_USER=\${REGISTRY_USER:-}
+      - REGISTRY_PASS=\${REGISTRY_PASS:-}
+      - INSECURE_REGISTRIES=\${INSECURE_REGISTRIES-registry:5000}
 EOF
             if [ "${build_temp}" = "1" ]; then
                 cat <<EOF

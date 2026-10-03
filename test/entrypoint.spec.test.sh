@@ -18,7 +18,7 @@ mkdir -p "${T}/bin"
 cat > "${T}/bin/dockerd" <<'EOF'
 #!/bin/bash
 echo "dockerd-log-marker"
-echo "dockerd-start" >> "${TRACE}"
+echo "dockerd-start $*" >> "${TRACE}"
 trap 'echo "dockerd-stopped" >> "${TRACE}"; exit 0' TERM
 while true; do sleep 0.2; done
 EOF
@@ -64,6 +64,8 @@ export TRACE="${T}/trace-ready"
 DOCKERD_LOG="${T}/dockerd-ready.log" DOCKER_READY_ATTEMPTS=3 DOCKER_INFO_EXIT=0 \
     PATH="${T}/bin:${PATH}" bash "${ENTRY}" || fail "entrypoint exited non-zero with a ready daemon"
 grep -q 'dockerd-start' "${TRACE}" || fail "dockerd was not started"
+grep -q -- '--insecure-registry registry:5000' "${TRACE}" ||
+    fail "the co-located registry must be marked insecure by default"
 grep -q 'setpriv --reuid=docker --regid=docker --init-groups' "${TRACE}" ||
     fail "runner was not dropped to the docker user"
 grep -q 'HOME=/home/docker' "${TRACE}" || fail "runner HOME was not set"
@@ -73,6 +75,17 @@ RUNNER_EXIT_LINE="$(grep -n 'runner-exit' "${TRACE}" | tail -1 | cut -d: -f1)"
 STOP_LINE="$(grep -n 'dockerd-stopped' "${TRACE}" | tail -1 | cut -d: -f1)"
 [ "${RUNNER_EXIT_LINE}" -lt "${STOP_LINE}" ] || fail "daemon stopped before the runner exited"
 echo "PASS: entrypoint starts the daemon, runs the runner, and stops the daemon"
+
+# Custom insecure registries are passed through to the daemon.
+export TRACE="${T}/trace-insecure"
+: > "${TRACE}"
+DOCKERD_LOG="${T}/dockerd-insecure.log" DOCKER_READY_ATTEMPTS=3 DOCKER_INFO_EXIT=0 \
+    INSECURE_REGISTRIES="reg-a.example:5000 reg-b.example:5000" \
+    PATH="${T}/bin:${PATH}" bash "${ENTRY}" || fail "entrypoint exited non-zero with custom registries"
+grep -q -- '--insecure-registry reg-a.example:5000' "${TRACE}" || fail "first custom registry missing"
+grep -q -- '--insecure-registry reg-b.example:5000' "${TRACE}" || fail "second custom registry missing"
+grep -q -- '--insecure-registry registry:5000' "${TRACE}" && fail "default registry must be replaced by the override"
+echo "PASS: custom insecure registries are passed to the daemon"
 
 # The runner's exit status is propagated by the supervisor.
 export TRACE="${T}/trace-status"

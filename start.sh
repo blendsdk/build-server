@@ -49,6 +49,16 @@ trap 'cleanup; exit 143' TERM
 
 nvm install --lts
 
+# Authenticate the inner daemon to the co-located registry so jobs can push images without an
+# extra login step. Credentials come from the generated service environment.
+if [ -n "${REGISTRY_ADDR:-}" ] && [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_PASS:-}" ]; then
+    if echo "${REGISTRY_PASS}" | docker login "${REGISTRY_ADDR}" -u "${REGISTRY_USER}" --password-stdin >/dev/null 2>&1; then
+        echo "Logged in to ${REGISTRY_ADDR}"
+    else
+        echo "WARNING: could not log in to ${REGISTRY_ADDR}" >&2
+    fi
+fi
+
 ./config.sh --replace --unattended --url "${GITHUB_URL}" \
     --token "${REG_TOKEN}" --name "${LABEL}"
 

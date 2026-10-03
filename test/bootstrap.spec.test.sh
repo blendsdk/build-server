@@ -154,6 +154,8 @@ ACCESS_TOKEN=secret-token REGISTRY_HTTP_SECRET=secret-http REGISTRY_USER=ci REGI
 [ "$(stat -c '%a' "${T}/install/.env")" = "600" ] || fail ".env must be 0600"
 grep -q '^ACCESS_TOKEN=secret-token$' "${T}/install/.env" || fail ".env token wrong"
 grep -q '^REGISTRY_HTTP_SECRET=secret-http$' "${T}/install/.env" || fail ".env secret wrong"
+grep -q '^REGISTRY_USER=ci$' "${T}/install/.env" || fail ".env registry user wrong"
+grep -q '^REGISTRY_PASS=secret-pass$' "${T}/install/.env" || fail ".env registry password wrong"
 
 for file in .npmrc .yarnrc .bunfig.toml config.json; do
     [ -f "${T}/install/${file}" ] || fail "placeholder ${file} missing"
@@ -175,6 +177,8 @@ ACCESS_TOKEN=other-token REGISTRY_HTTP_SECRET=other-http REGISTRY_PASS=other-pas
     fail "bootstrap rerun should succeed"
 grep -q '^ACCESS_TOKEN=keep-me$' "${T}/install/.env" || fail "rerun must not overwrite .env"
 grep -q '^REGISTRY_PORT=' "${T}/install/.env" || fail "a missing REGISTRY_PORT should be added on rerun"
+grep -q '^REGISTRY_USER=ci$' "${T}/install/.env" || fail "missing registry user should be added on rerun"
+grep -q '^REGISTRY_PASS=other-pass$' "${T}/install/.env" || fail "an explicit registry password should be recorded on rerun"
 grep -q 'git .*fetch' "${T}/trace" || fail "rerun must update the existing checkout"
 echo "PASS: reruns update the checkout and preserve .env"
 

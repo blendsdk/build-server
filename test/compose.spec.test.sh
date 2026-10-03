@@ -74,6 +74,25 @@ REG_SECRET="$(jq -r '.services.registry.environment.REGISTRY_HTTP_SECRET' "${MOD
 OTHER_SECRETS="$(jq '[.services | to_entries[] | select(.key != "registry") | select(.value.environment.REGISTRY_HTTP_SECRET != null)] | length' "${MODEL}")"
 [ "${OTHER_SECRETS}" -eq 0 ] || fail "only the registry service may receive REGISTRY_HTTP_SECRET"
 
+# Runner services receive the co-located registry address and credentials for docker push.
+REGISTRY_USER=dummy-user REGISTRY_PASS=dummy-pass REGISTRY_ADDR=registry:5000 \
+    ACCESS_TOKEN=dummy-token REGISTRY_HTTP_SECRET=dummy-secret \
+    docker compose -f docker-compose.yml -f docker-compose.generated.yml config --format json \
+    >"${T}/model-registry.json" 2>"${T}/config-registry.err" ||
+    {
+        cat "${T}/config-registry.err" >&2
+        fail "compose model with registry credentials is invalid"
+    }
+REGISTRY_MODEL="${T}/model-registry.json"
+[ "$(jq -r '.services.acmetools_1.environment.REGISTRY_ADDR' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
+    fail "REGISTRY_ADDR was not injected into runner services"
+[ "$(jq -r '.services.acmetools_1.environment.REGISTRY_USER' "${REGISTRY_MODEL}")" = "dummy-user" ] ||
+    fail "REGISTRY_USER was not injected into runner services"
+[ "$(jq -r '.services.acmetools_1.environment.REGISTRY_PASS' "${REGISTRY_MODEL}")" = "dummy-pass" ] ||
+    fail "REGISTRY_PASS was not injected into runner services"
+[ "$(jq -r '.services.acmetools_1.environment.INSECURE_REGISTRIES' "${REGISTRY_MODEL}")" = "registry:5000" ] ||
+    fail "INSECURE_REGISTRIES default missing from runner services"
+
 # The registry host port is configurable; runners use registry:5000 regardless.
 DEFAULT_PORT="$(jq -r '.services.registry.ports[0].published' "${MODEL}")"
 [ "${DEFAULT_PORT}" = "5000" ] || fail "default registry host port must be 5000"

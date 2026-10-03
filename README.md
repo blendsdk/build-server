@@ -19,6 +19,7 @@ host Docker socket is never shared.
 - **Persistent, cache-warm runners** — one privileged container per organization.
 - **Per-organization custom images** — add a `context=` folder with a Dockerfile.
 - **Runner version updates** — `./fleet.sh update-runners` pins and deploys the latest release.
+- **Job image publishing** — jobs build and push to the co-located registry with plain `docker push`.
 - **One-command install** — `bootstrap.sh` sets up a fresh Ubuntu host.
 
 ## Quick start

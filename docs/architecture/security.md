@@ -25,12 +25,16 @@ The runner image bakes host credentials so private dependencies work out of the 
 | `~/.ssh/id_rsa` | Private git over SSH inside jobs |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml` | Private package registries |
 | `config.json` | Private Docker registry authentication |
-| `.env` | `ACCESS_TOKEN` and `REGISTRY_HTTP_SECRET` for the fleet |
+| `.env` | `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET`, and the registry credentials injected into runners |
+
+The registry user and password from `.env` are also passed to every runner service (as
+`REGISTRY_USER`/`REGISTRY_PASS`) so jobs can push images — see
+[Publishing images](/guide/publishing).
 
 Consequences:
 
-- Any job on a runner can read these files. Do not mix tenants (clients) in one fleet unless they
-  trust each other.
+- Any job on a runner can read these files and environment variables. Do not mix tenants (clients)
+  in one fleet unless they trust each other.
 - Use least-privilege tokens: the `ACCESS_TOKEN` needs runner management for the organizations in
   `orgs.conf`, nothing more.
 - Rotate credentials if an image or host is ever exposed, and keep `.env`/credential files

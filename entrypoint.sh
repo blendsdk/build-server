@@ -13,8 +13,16 @@ DOCKERD_LOG="${DOCKERD_LOG:-/var/log/dockerd.log}"
 DOCKER_READY_ATTEMPTS="${DOCKER_READY_ATTEMPTS:-60}"
 RUNNER_START_SCRIPT="${RUNNER_START_SCRIPT:-/start.sh}"
 
+# The co-located registry is plain HTTP, so the inner daemon must treat it as insecure unless a
+# TLS endpoint replaces it (override INSECURE_REGISTRIES with a space-separated list, or empty).
+INSECURE_REGISTRIES="${INSECURE_REGISTRIES-registry:5000}"
+DOCKERD_ARGS=()
+for registry in ${INSECURE_REGISTRIES}; do
+    DOCKERD_ARGS+=(--insecure-registry "${registry}")
+done
+
 echo "Starting Docker daemon..."
-dockerd >>"${DOCKERD_LOG}" 2>&1 &
+dockerd "${DOCKERD_ARGS[@]}" >>"${DOCKERD_LOG}" 2>&1 &
 DOCKERD_PID=$!
 
 READY=0

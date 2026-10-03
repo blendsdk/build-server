@@ -32,6 +32,12 @@ printf '%s' "${CURL_BODY}"
 exit 0
 EOF
 
+cat > "${T}/bin/docker" <<'EOF'
+#!/bin/bash
+printf 'docker %s\n' "$*" >> "${TRACE}"
+exit 0
+EOF
+
 cat > "${T}/runner/config.sh" <<'EOF'
 #!/bin/bash
 echo "config.sh $*" >> "${TRACE}"
@@ -84,7 +90,21 @@ done
 grep -q 'run.sh' "${TRACE}" || fail "runner was not started"
 grep -q -- 'user.email TestOrg_testhost@users.noreply.github.com' "${TRACE}" ||
     fail "default runner email domain wrong"
+grep -q 'docker login' "${TRACE}" && fail "must not log in without registry credentials"
 echo "PASS: start.sh registers with --replace and runs"
+
+# The inner daemon is logged in to the co-located registry so jobs can push images.
+: > "${TRACE}"
+set +e
+HOME="${T}/home" RUNNER_HOME="${T}/runner" HOSTNAME=testhost ORGANIZATION=TestOrg ACCESS_TOKEN=tok \
+    REGISTRY_ADDR=registry:5000 REGISTRY_USER=ci REGISTRY_PASS=secret \
+    CURL_BODY='{"token":"fake-token"}' PATH="${T}/bin:${PATH}" bash "${START}" >/dev/null 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -eq 0 ] || fail "start.sh should exit zero with registry credentials"
+grep -q 'docker login registry:5000 -u ci --password-stdin' "${TRACE}" ||
+    fail "the inner daemon must log in to the co-located registry"
+echo "PASS: the inner daemon logs in to the co-located registry"
 
 # A custom email domain is used verbatim.
 : > "${TRACE}"

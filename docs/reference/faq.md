@@ -40,6 +40,11 @@ Add one line to `orgs.conf` and run `./fleet.sh up`.
 `.runner-version` is only written after all builds succeed, and staging directories are removed on
 failure. A SIGKILL can leave `.fleet-build/` behind; remove it manually.
 
+**Can jobs publish images to the registry?**
+
+Yes. Runners reach it as `registry:5000` and are logged in automatically. See
+[Publishing images from jobs](/guide/publishing).
+
 **Does the private registry need to be reachable from outside?**
 
 No. Runners reach it as `registry:5000` over the internal Compose network. Only other machines that

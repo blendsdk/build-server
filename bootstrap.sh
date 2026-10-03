@@ -318,12 +318,15 @@ fi
 [ -n "${ACCESS_TOKEN}" ] || die "ACCESS_TOKEN must not be empty"
 
 if [ -z "${REGISTRY_PASS:-}" ]; then
+    REGISTRY_PASS_EXPLICIT=0
     if [ "${NONINTERACTIVE}" = "1" ] || [ ! -r /dev/tty ]; then
         REGISTRY_PASS="$(random_hex 16)"
         GENERATED_REGISTRY_PASS=1
     else
         prompt_var REGISTRY_PASS "Registry password for user ${REGISTRY_USER}" secret
     fi
+else
+    REGISTRY_PASS_EXPLICIT=1
 fi
 [ -n "${REGISTRY_PASS}" ] || die "REGISTRY_PASS must not be empty"
 REGISTRY_HTTP_SECRET="${REGISTRY_HTTP_SECRET:-$(random_hex 32)}"
@@ -367,11 +370,19 @@ cd "${INSTALL_DIR}"
 configure_orgs
 
 # --- host configuration ---------------------------------------------------------
+# Whether this run knows the password that matches the existing htpasswd file.
+if [ -s registry/auth/registry.password ] && [ "${REGISTRY_PASS_EXPLICIT}" = "0" ]; then
+    REGISTRY_PASS_KNOWN=0
+else
+    REGISTRY_PASS_KNOWN=1
+fi
+
 if [ ! -f .env ]; then
     REGISTRY_PORT_SELECTED="$(choose_registry_port)"
     umask 077
-    printf 'ACCESS_TOKEN=%s\nREGISTRY_HTTP_SECRET=%s\nREGISTRY_PORT=%s\n' \
-        "${ACCESS_TOKEN}" "${REGISTRY_HTTP_SECRET}" "${REGISTRY_PORT_SELECTED}" >.env
+    printf 'ACCESS_TOKEN=%s\nREGISTRY_HTTP_SECRET=%s\nREGISTRY_PORT=%s\nREGISTRY_USER=%s\nREGISTRY_PASS=%s\n' \
+        "${ACCESS_TOKEN}" "${REGISTRY_HTTP_SECRET}" "${REGISTRY_PORT_SELECTED}" \
+        "${REGISTRY_USER}" "${REGISTRY_PASS}" >.env
     chmod 600 .env
     say "wrote .env"
 else
@@ -380,6 +391,18 @@ else
         REGISTRY_PORT_SELECTED="$(choose_registry_port)"
         printf 'REGISTRY_PORT=%s\n' "${REGISTRY_PORT_SELECTED}" >>.env
         say "added REGISTRY_PORT=${REGISTRY_PORT_SELECTED} to .env"
+    fi
+    if [ "${REGISTRY_PASS_KNOWN}" = "1" ]; then
+        if ! grep -q '^REGISTRY_USER=' .env; then
+            printf 'REGISTRY_USER=%s\n' "${REGISTRY_USER}" >>.env
+            say "added REGISTRY_USER to .env"
+        fi
+        if ! grep -q '^REGISTRY_PASS=' .env; then
+            printf 'REGISTRY_PASS=%s\n' "${REGISTRY_PASS}" >>.env
+            say "added REGISTRY_PASS to .env"
+        fi
+    else
+        say "the existing registry password is unknown to this run; set REGISTRY_USER/REGISTRY_PASS in .env if jobs publish images"
     fi
 fi
 
@@ -409,7 +432,7 @@ if [ ! -f "${HOME}/.ssh/config" ]; then
 fi
 
 mkdir -p registry/auth registry/data
-if [ ! -s registry/auth/registry.password ]; then
+if [ ! -s registry/auth/registry.password ] || [ "${REGISTRY_PASS_EXPLICIT}" = "1" ]; then
     htpasswd -Bbn "${REGISTRY_USER}" "${REGISTRY_PASS}" >registry/auth/registry.password
     chmod 600 registry/auth/registry.password
     say "wrote registry/auth/registry.password for user ${REGISTRY_USER}"
