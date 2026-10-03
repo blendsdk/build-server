@@ -28,7 +28,6 @@ install user by default), so several installations can share one Docker host.
 | `Dockerfile` | Runner image: Ubuntu 24.04, inner Docker engine, Actions runner, Node via nvm |
 | `entrypoint.sh` | Starts `dockerd`, runs the runner as `docker`, stops the daemon on exit |
 | `start.sh` | Registers the runner (with `--replace`), runs it, deregisters on shutdown |
-| `work_queue` | Best-effort lock helper for build steps |
 
 ## Why an inner Docker daemon
 

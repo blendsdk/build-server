@@ -8,10 +8,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
 echo "shellcheck..."
-shellcheck -S style bootstrap.sh fleet.sh entrypoint.sh start.sh work_queue test/*.sh examples/playground.sh
+shellcheck -S style bootstrap.sh fleet.sh entrypoint.sh start.sh test/*.sh examples/playground.sh
 
 echo "spec and implementation tests..."
-bash test/work_queue.spec.test.sh
 bash test/orgs.spec.test.sh
 bash test/entrypoint.spec.test.sh
 bash test/start.spec.test.sh

@@ -39,10 +39,9 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends po
 
 RUN ln -sf /bin/bash /bin/sh
 
-# Container entrypoint and the lock utility jobs invoke.
+# Container entrypoint.
 COPY start.sh entrypoint.sh /
-COPY work_queue /bin/work_queue
-RUN chmod +x /start.sh /entrypoint.sh /bin/work_queue
+RUN chmod +x /start.sh /entrypoint.sh
 
 # Host-provided package-manager credentials and Docker registry configuration.
 COPY ./.npmrc /home/docker/.npmrc

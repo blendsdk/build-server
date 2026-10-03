@@ -34,7 +34,6 @@ docker-compose.yml        Static base: the private registry
 Dockerfile                Runner image (Ubuntu 24.04, inner Docker engine, Actions runner)
 entrypoint.sh             Starts the private daemon, supervises the runner
 start.sh                  Registers the runner, runs it, deregisters on shutdown
-work_queue                Best-effort lock utility
 docs/                     VitePress site (GitHub Pages)
 examples/                 Offline playground and smoke-test recipe
 test/                     Spec tests (*.spec.test.sh), impl tests (*.impl.test.sh), verify.sh

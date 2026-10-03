@@ -19,7 +19,6 @@
 | `Dockerfile` | Runner image |
 | `entrypoint.sh` | Inner daemon startup and runner supervision |
 | `start.sh` | Runner registration and lifecycle |
-| `work_queue` | Best-effort lock helper |
 | `.env` | Host secrets: `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET` |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json` | Host credentials baked into the image |
 | `ssh/` | Staged by `fleet.sh build` from `~/.ssh` |

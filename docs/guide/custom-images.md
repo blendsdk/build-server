@@ -33,7 +33,7 @@ organizations keep the default `runner-image`.
   the runner user intact.
 - A self-contained Dockerfile is possible, but it must provide the same contract: the root
   `/entrypoint.sh` (start `dockerd`, then run `/start.sh` as the `docker` user), an
-  `/home/docker/actions-runner`, and `start.sh`/`work_queue` in place.
+  `/home/docker/actions-runner`, and `start.sh` in place.
 - `update-runners` builds the default image first, then every custom context with
   `--build-arg RUNNER_VERSION=<version>`. Consume that argument if you replace the base:
 

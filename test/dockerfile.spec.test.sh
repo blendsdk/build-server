@@ -40,4 +40,7 @@ done
 grep -Eq "(^|[[:space:]])pnpm([[:space:]]|$)" "${DOCKERFILE}" || fail "Dockerfile must install pnpm globally"
 grep -Eq "(^|[[:space:]])lerna([[:space:]]|$)" "${DOCKERFILE}" && fail "lerna must not be installed"
 
+# The work_queue lock helper was removed from the fleet.
+grep -Eq "(^|[[:space:]])work_queue([[:space:]]|$)" "${DOCKERFILE}" && fail "work_queue must not be shipped"
+
 echo "Dockerfile spec tests: PASS"

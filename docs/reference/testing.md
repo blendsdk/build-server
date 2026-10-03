@@ -28,7 +28,6 @@ CI runs the same command on GitHub-hosted runners.
 | `test/fleet.spec.test.sh` | CLI build/update/lifecycle behavior with stubbed externals |
 | `test/fleet.impl.test.sh` | Internal behavior: atomic writes, staging modes, version precedence |
 | `test/bootstrap.spec.test.sh` | Fresh-host installer with stubbed commands |
-| `test/work_queue.spec.test.sh` | The lock helper |
 | `test/entrypoint.spec.test.sh` / `entrypoint.impl.test.sh` | Inner daemon startup and supervision |
 
 Rules: specification tests (`*.spec.test.sh`) describe documented behavior and are written before

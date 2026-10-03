@@ -1,5 +1,5 @@
 # Keep the default build context small. Files the Dockerfile needs at runtime are NOT excluded:
-# start.sh, entrypoint.sh, work_queue, .npmrc, .yarnrc, .bunfig.toml, config.json, ssh/.
+# start.sh, entrypoint.sh, .npmrc, .yarnrc, .bunfig.toml, config.json, ssh/.
 .git
 .opencode
 codeops
