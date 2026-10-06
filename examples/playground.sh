@@ -11,6 +11,8 @@
 #   examples/playground.sh run generate       # run any fleet.sh command in the sandbox
 #   examples/playground.sh run build
 #   examples/playground.sh run update-runners
+#   examples/playground.sh run clean --yes
+#   examples/playground.sh run upgrade-all --yes
 #   examples/playground.sh run status
 #   examples/playground.sh show               # print the generated compose file
 #   examples/playground.sh trace              # print every stub docker/curl call
@@ -57,6 +59,8 @@ EOF
     echo "  $0 run build           # see how the default image would be built"
     echo "  $0 run build Initech   # see the custom-context staging flow"
     echo "  $0 run update-runners  # see the version update flow (stubbed release API)"
+    echo "  $0 run clean --yes     # see the cleanup of unused fleet resources"
+    echo "  $0 run upgrade-all --yes  # teardown, cleanup, rebuild, and restart"
     echo "  $0 run status          # print the fleet table"
     echo "  $0 trace               # every stub call that was made"
     echo "  $0 reset               # start over"

@@ -345,4 +345,141 @@ set -e
 [ "${CODE}" -ne 0 ] || fail "unknown org should fail"
 echo "PASS: error paths fail cleanly and preserve state"
 
+# --- clean: confirmation, staging, and installation-scoped pruning --------------------------
+S="${T}/clean"
+new_sandbox "${S}"
+mkdir -p "${S}/.fleet-build/beta" "${S}/ssh"
+printf 'junk' > "${S}/.fleet-build/beta/junk"
+printf 'junk' > "${S}/ssh/id_rsa"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" clean >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "clean without --yes must fail when non-interactive"
+grep -q 'prune' "${S}/trace" && fail "clean without --yes must not touch docker"
+
+run_fleet "${S}" clean --yes >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "clean --yes should succeed"
+}
+[ ! -d "${S}/.fleet-build" ] || fail "clean must remove the staging directory"
+[ ! -d "${S}/ssh" ] || fail "clean must remove leftover ssh staging"
+grep -qF 'container prune -f --filter label=com.docker.compose.project=' "${S}/trace" ||
+    fail "clean must prune this project's stopped containers"
+grep -qF 'network prune -f --filter label=com.docker.compose.project=' "${S}/trace" ||
+    fail "clean must prune this project's networks"
+grep -qF 'volume prune -af --filter label=com.docker.compose.project=' "${S}/trace" ||
+    fail "clean must prune this project's volumes"
+grep -qF 'image prune -f' "${S}/trace" || fail "clean must remove dangling images"
+grep -qF 'image prune -af --filter label=com.build-server.fleet=' "${S}/trace" ||
+    fail "clean must remove this installation's unused images"
+grep -qF 'image rm runner-image' "${S}/trace" || fail "clean must remove legacy unlabeled runner images"
+grep -qF 'builder prune -af' "${S}/trace" || fail "clean must purge the build cache"
+echo "PASS: clean confirms, clears staging, and prunes this installation's resources"
+
+# --- down: stop, unregister, then clean unused resources in that order ----------------------
+S="${T}/down-cleanup"
+new_sandbox "${S}"
+: > "${S}/trace"
+CURL_BODY='{"total_count":1,"runners":[{"id":11,"name":"Alpha_alpha_runner_1"}]}' CURL_HTTP_CODE=200 \
+    run_fleet "${S}" down >"${S}/out" 2>&1 || fail "down should succeed with cleanup"
+DOWN_LINE="$(grep -n 'down --remove-orphans' "${S}/trace" | head -1 | cut -d: -f1)"
+DELETE_LINE="$(grep -n -- '-X DELETE' "${S}/trace" | head -1 | cut -d: -f1)"
+CACHE_LINE="$(grep -n 'builder prune -af' "${S}/trace" | head -1 | cut -d: -f1)"
+IMAGE_LINE="$(grep -n 'image prune -af --filter label=com.build-server.fleet=' "${S}/trace" | head -1 | cut -d: -f1)"
+[ -n "${CACHE_LINE}" ] || fail "down must purge the build cache"
+[ -n "${IMAGE_LINE}" ] || fail "down must remove this installation's unused images"
+[ "${DOWN_LINE}" -lt "${CACHE_LINE}" ] || fail "cleanup must run after the fleet is stopped"
+[ "${DELETE_LINE}" -lt "${IMAGE_LINE}" ] || fail "image cleanup must run after unregistration"
+echo "PASS: down stops, unregisters, then cleans unused resources"
+
+# --- restart must not run the destructive cleanup -------------------------------------------
+S="${T}/restart-keeps"
+new_sandbox "${S}"
+: > "${S}/trace"
+run_fleet "${S}" restart >/dev/null 2>&1 || fail "restart should succeed"
+grep -q 'builder prune' "${S}/trace" && fail "restart must not purge the build cache"
+grep -q 'image rm' "${S}/trace" && fail "restart must not remove runner images"
+echo "PASS: restart leaves images and the build cache in place"
+
+# --- build clears staging leftovers from an interrupted run ---------------------------------
+S="${T}/build-leftovers"
+new_sandbox "${S}"
+mkdir -p "${S}/.fleet-build/beta" "${S}/ssh"
+printf 'junk' > "${S}/.fleet-build/beta/junk"
+: > "${S}/trace"
+run_fleet "${S}" build Beta >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "build must clear leftover staging instead of failing"
+}
+grep -q -- '-t runner-image-beta' "${S}/trace" || fail "custom image build missing after leftover cleanup"
+[ ! -d "${S}/.fleet-build" ] || fail "staging directory left behind"
+[ ! -d "${S}/ssh" ] || fail "ssh staging left behind"
+echo "PASS: build clears leftover staging before building"
+
+# --- builds label their images and purge after success, not after failure -------------------
+S="${T}/build-prune"
+new_sandbox "${S}"
+: > "${S}/trace"
+run_fleet "${S}" build >/dev/null 2>&1 || fail "build should succeed"
+grep -qF -- '--label com.build-server.fleet=' "${S}/trace" ||
+    fail "fleet images must carry the installation label"
+grep -qF 'image prune -f' "${S}/trace" || fail "build must remove dangling images"
+grep -qF 'builder prune -af' "${S}/trace" || fail "build must purge the build cache"
+echo "PASS: successful builds label images and purge leftovers"
+
+S="${T}/build-prune-fail"
+new_sandbox "${S}"
+: > "${S}/trace"
+set +e
+DOCKER_EXIT=7 run_fleet "${S}" build >/dev/null 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "a failing build must fail the command"
+grep -q 'builder prune' "${S}/trace" && fail "a failed build must not purge the build cache"
+echo "PASS: failed builds leave the build cache in place"
+
+# --- upgrade-all: fetch, teardown, cleanup, rebuild, and restart ----------------------------
+S="${T}/upgrade-all"
+new_sandbox "${S}"
+printf 'COMPOSE_PROJECT_NAME=upgrade-proj\n' > "${S}/.env"
+cp "${S}/orgs.conf" "${S}/orgs.conf.before"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" upgrade-all >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "upgrade-all without --yes must fail when non-interactive"
+grep -q 'tag_name' "${S}/trace" && fail "upgrade-all without --yes must not call the GitHub API"
+
+: > "${S}/trace"
+CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" upgrade-all --yes >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "upgrade-all --yes should succeed"
+}
+[ "$(cat "${S}/.runner-version")" = "9.9.9" ] || fail "upgrade-all must pin the fetched version"
+cmp -s "${S}/orgs.conf" "${S}/orgs.conf.before" || fail "upgrade-all must preserve orgs.conf"
+FETCH_LINE="$(grep -n 'actions/runner/releases/latest' "${S}/trace" | head -1 | cut -d: -f1)"
+DOWN_LINE="$(grep -n 'down --remove-orphans' "${S}/trace" | head -1 | cut -d: -f1)"
+CACHE_LINE="$(grep -n 'builder prune -af' "${S}/trace" | head -1 | cut -d: -f1)"
+DEFAULT_LINE="$(grep -n -- '-t runner-image ' "${S}/trace" | head -1 | cut -d: -f1)"
+CUSTOM_LINE="$(grep -n -- '-t runner-image-beta ' "${S}/trace" | head -1 | cut -d: -f1)"
+UP_LINE="$(grep -n 'up -d' "${S}/trace" | tail -1 | cut -d: -f1)"
+[ -n "${FETCH_LINE}" ] || fail "upgrade-all must fetch the latest runner version"
+[ -n "${DOWN_LINE}" ] || fail "upgrade-all must stop the fleet"
+[ -n "${CACHE_LINE}" ] || fail "upgrade-all must clean the build cache"
+[ -n "${DEFAULT_LINE}" ] || fail "upgrade-all must rebuild the default image"
+[ -n "${CUSTOM_LINE}" ] || fail "upgrade-all must rebuild custom images"
+[ "${FETCH_LINE}" -lt "${DOWN_LINE}" ] ||
+    fail "the version must be fetched before the teardown so an API failure changes nothing"
+[ "${DOWN_LINE}" -lt "${CACHE_LINE}" ] || fail "cleanup must run after the teardown"
+[ "${CACHE_LINE}" -lt "${DEFAULT_LINE}" ] || fail "images must be rebuilt after the cleanup"
+[ "${DEFAULT_LINE}" -lt "${CUSTOM_LINE}" ] || fail "the default image must build first"
+[ "${CUSTOM_LINE}" -lt "${UP_LINE}" ] || fail "the fleet must start after the rebuilds"
+[ "$(grep -c -- '--build-arg RUNNER_VERSION=9.9.9' "${S}/trace")" -eq 2 ] ||
+    fail "every upgrade-all build must use the fetched version"
+grep -q -- '-X DELETE' "${S}/trace" && fail "upgrade-all must not remove runner registrations"
+echo "PASS: upgrade-all fetches, tears down, cleans, rebuilds, and restarts"
+
 echo "fleet spec tests: PASS"

@@ -49,6 +49,8 @@ Usage: fleet.sh <command> [args]
                            Manage the fleet
   update <org>             Rebuild one org's image and recreate only its runner
   update-runners           Rebuild every image with the latest Actions runner version
+  clean [--yes]            Remove this installation's unused images and the host build cache
+  upgrade-all [--yes]      Full teardown, cleanup, rebuild with the latest runner, and restart
   status                   Show the fleet and container state
 EOF
 }
@@ -255,6 +257,11 @@ BUILD_TMP="${ROOT}/.fleet-build"
 STAGED_PATHS=()
 GENERATED_TMP=""
 
+# Every image this installation builds carries this label with the Compose project name as its
+# value. Cleanup uses it to remove only this installation's images, so several installations can
+# share one Docker host without deleting each other's images.
+FLEET_LABEL="com.build-server.fleet"
+
 # Remove anything staged for a build, on success or failure.
 cleanup_staging() {
     local path
@@ -275,6 +282,89 @@ cleanup_all() {
     cleanup_staging
 }
 trap cleanup_all EXIT
+
+# Remove staging leftovers from an interrupted build before staging again. A SIGKILL can leave
+# these directories behind; the build no longer stops on them.
+clear_staging_leftovers() {
+    if [ -e "${BUILD_TMP}" ] || [ -e "${ROOT}/ssh" ]; then
+        echo "fleet: removed leftover build staging"
+    fi
+    rm -rf "${BUILD_TMP}" "${ROOT}/ssh"
+}
+
+# Reclaim disk after a successful build: the replaced image is now untagged, and the build cache
+# only speeds up the next build. Docker cannot scope the cache to one installation, so this also
+# slows the next build of every other Docker project on the host.
+prune_after_build() {
+    docker image prune -f
+    docker builder prune -af
+}
+
+# Remove the current runner images of this installation when they predate the fleet label.
+# Labeled images are handled by the scoped prune in purge_fleet, and Docker itself refuses to
+# remove an image that a container still references.
+remove_legacy_fleet_images() {
+    local images=("runner-image") i image labels
+    for i in "${!ORG_SLUGS[@]}"; do
+        [ -z "${ORG_CONTEXTS[$i]}" ] || images+=("runner-image-${ORG_SLUGS[$i]}")
+    done
+    for image in "${images[@]}"; do
+        docker image inspect "${image}" >/dev/null 2>&1 || continue
+        labels="$(docker image inspect --format '{{json .Config.Labels}}' "${image}" 2>/dev/null || true)"
+        case "${labels}" in
+            *"\"${FLEET_LABEL}\":"*) continue ;;
+        esac
+        if docker image rm "${image}" >/dev/null 2>&1; then
+            echo "fleet: removed legacy image ${image}"
+        fi
+    done
+}
+
+# Remove this installation's unused containers, networks, volumes, and images, plus the host
+# build cache. Images are matched by the fleet label, so other installations on the same Docker
+# host keep their images; the cache purge is host-wide because Docker cannot scope it.
+purge_fleet() {
+    clear_staging_leftovers
+    echo "fleet: cleaning unused resources of project ${COMPOSE_PROJECT_NAME}"
+    docker container prune -f --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+    docker network prune -f --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+    docker volume prune -af --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+    docker image prune -f
+    docker image prune -af --filter "label=${FLEET_LABEL}=${COMPOSE_PROJECT_NAME}"
+    remove_legacy_fleet_images
+    echo "fleet: purging the host build cache (shared with other Docker projects)"
+    docker builder prune -af
+}
+
+# Ask before a destructive cleanup. --yes is required when no terminal is attached, so scripts
+# can never destroy resources by accident.
+confirm_destructive() {
+    local action="$1" assume_yes="${2:-}" what answer
+    case "${action}" in
+        clean)
+            what="removes this installation's unused images, containers, networks, and volumes, plus the host build cache"
+            ;;
+        upgrade-all)
+            what="stops the fleet, removes this installation's unused images and the host build cache, then rebuilds every image with the latest runner and restarts"
+            ;;
+        *)
+            what="removes unused resources"
+            ;;
+    esac
+    [ "${assume_yes}" = "--yes" ] && return 0
+    [ -z "${assume_yes}" ] || die "usage: fleet.sh ${action} [--yes]"
+    if [ -t 0 ]; then
+        read -r -p "fleet: ${action} ${what}; continue? [y/N] " answer
+        case "${answer}" in
+            y | Y | yes | YES) return 0 ;;
+            *)
+                echo "fleet: cancelled"
+                exit 0
+                ;;
+        esac
+    fi
+    die "${action} requires --yes when not attached to a terminal"
+}
 
 # Index of an organization by slug, or non-zero when unknown.
 org_index_by_slug() {
@@ -312,10 +402,11 @@ stage_credentials() {
 # Build the default runner image from the repository context.
 build_default() {
     local version="${1:-$(resolved_version)}"
-    [ ! -e "${ROOT}/ssh" ] || die "${ROOT}/ssh already exists; remove the leftover staging directory"
+    clear_staging_leftovers
     stage_ssh "${ROOT}"
     STAGED_PATHS+=("${ROOT}/ssh")
-    docker build --build-arg "RUNNER_VERSION=${version}" -t runner-image "${ROOT}"
+    docker build --build-arg "RUNNER_VERSION=${version}" \
+        --label "${FLEET_LABEL}=${COMPOSE_PROJECT_NAME}" -t runner-image "${ROOT}"
     cleanup_staging
 }
 
@@ -326,15 +417,16 @@ build_org() {
     context="${ORG_CONTEXTS[$index]}"
     [ -n "${context}" ] ||
         die "organization '${ORG_NAMES[$index]}' has no context=; use 'fleet.sh build' for the default image"
+    clear_staging_leftovers
     staging="${BUILD_TMP}/${slug}"
-    [ ! -e "${staging}" ] || die "${staging} already exists; remove the leftover staging directory"
     umask 077
     mkdir -p "${staging}"
     STAGED_PATHS+=("${staging}")
     cp -R "${context}/." "${staging}/"
     stage_ssh "${staging}"
     stage_credentials "${staging}"
-    docker build --build-arg "RUNNER_VERSION=${version}" -t "runner-image-${slug}" "${staging}"
+    docker build --build-arg "RUNNER_VERSION=${version}" \
+        --label "${FLEET_LABEL}=${COMPOSE_PROJECT_NAME}" -t "runner-image-${slug}" "${staging}"
     cleanup_staging
 }
 
@@ -371,15 +463,22 @@ update_org() {
     compose up -d --no-deps "${slug}"
 }
 
-# Rebuild every image with the latest runner version and recreate the fleet.
-update_runners() {
-    local version i
-    version="$(fetch_latest_version)"
+# Rebuild the default and every custom image with VERSION, then pin the version. The pin is
+# written only after every build succeeds, so a failed upgrade keeps the previous version.
+rebuild_all() {
+    local version="$1" i
     build_default "${version}"
     for i in "${!ORG_NAMES[@]}"; do
         [ -z "${ORG_CONTEXTS[$i]}" ] || build_org "${ORG_SLUGS[$i]}" "${version}"
     done
     printf '%s\n' "${version}" >"${RUNNER_VERSION_FILE}"
+}
+
+# Rebuild every image with the latest runner version and recreate the fleet.
+update_runners() {
+    local version
+    version="$(fetch_latest_version)"
+    rebuild_all "${version}"
     compose up -d
 }
 
@@ -479,17 +578,39 @@ case "${COMMAND}" in
         else
             build_default
         fi
+        prune_after_build
         ;;
     update)
         parse_config
         render_compose
         [ "${#}" -ge 2 ] || die "update requires an organization"
         update_org "$(slugify "${2}")"
+        prune_after_build
         ;;
     update-runners)
         parse_config
         render_compose
         update_runners
+        prune_after_build
+        ;;
+    clean)
+        parse_config
+        confirm_destructive clean "${2:-}"
+        purge_fleet
+        ;;
+    upgrade-all)
+        parse_config
+        render_compose
+        confirm_destructive upgrade-all "${2:-}"
+        # Fetch before tearing anything down: an API failure must leave the fleet untouched.
+        version="$(fetch_latest_version)"
+        remove_legacy_containers
+        compose down --remove-orphans
+        purge_fleet
+        rebuild_all "${version}"
+        compose up -d
+        prune_after_build
+        echo "fleet: upgrade to runner ${version} complete"
         ;;
     up)
         parse_config
@@ -504,6 +625,7 @@ case "${COMMAND}" in
         remove_legacy_containers
         compose down --remove-orphans
         unregister_runners
+        purge_fleet
         ;;
     stop)
         parse_config

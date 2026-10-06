@@ -19,7 +19,7 @@
 | `npm ci && npm run docs:build` | Build the VitePress documentation site | Verified |
 | `npm run docs:dev` | Live docs preview | Verified |
 | `bash examples/playground.sh` | Offline CLI playground with stub docker/curl | Verified |
-| `./fleet.sh generate / build / up / down / status` | Fleet operations | Build-host only |
+| `./fleet.sh generate / build / up / down / clean / upgrade-all / status` | Fleet operations | Build-host only |
 | `bash bootstrap.sh [--no-start]` | Fresh-host install | Build-host only |
 
 Run `bash test/verify.sh` before every commit; CI runs the same command on GitHub-hosted runners.
