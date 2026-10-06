@@ -3,7 +3,7 @@
 > **Feature-Set**: Maintenance
 > **Status**: In Progress
 > **Created**: 2026-10-03
-> **Last Updated**: 2026-10-03 17:50
+> **Last Updated**: 2026-10-06
 > **Progress**: n/a
 > **CodeOps Artifact Schema**: 1
 
@@ -27,3 +27,4 @@
 | T-10 | Remove runner registrations on fleet down | — | [down-unregister](plans/down-unregister/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
 | T-11 | Runner image tooling: git, openssh-client, pnpm | — | [runner-image-tools](plans/runner-image-tools/99-execution-plan.md) | Done | ✅ | 2026-10-03 | — |
 | T-12 | Drop the unused work_queue lock helper | — | — | Done | ✅ | 2026-10-03 | — |
+| T-13 | Allowlist pnpm's install script under npm 12 | — | — | Done | ✅ | 2026-10-06 | — |

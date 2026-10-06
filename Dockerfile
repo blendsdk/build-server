@@ -62,6 +62,12 @@ USER docker
 
 # Node is installed once at build time; the runner entrypoint re-sources the nvm profile.
 ENV NVM_DIR=/home/docker/.nvm
+
+# npm 12 blocks dependency lifecycle scripts unless their package is allowlisted. pnpm's install
+# script replaces its shebang-less placeholder with the native binary; without it, Turbo fails to
+# spawn pnpm with "Exec format error". Only pnpm is allowlisted, so npm 12 keeps blocking others.
+ENV NPM_CONFIG_ALLOW_SCRIPTS=pnpm
+
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash && \
     . "$NVM_DIR/nvm.sh" && \
     nvm install --lts && \

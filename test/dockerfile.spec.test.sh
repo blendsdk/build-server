@@ -40,6 +40,12 @@ done
 grep -Eq "(^|[[:space:]])pnpm([[:space:]]|$)" "${DOCKERFILE}" || fail "Dockerfile must install pnpm globally"
 grep -Eq "(^|[[:space:]])lerna([[:space:]]|$)" "${DOCKERFILE}" && fail "lerna must not be installed"
 
+# npm 12 blocks dependency lifecycle scripts unless the package is allowlisted. pnpm's install
+# script is what replaces its shebang-less placeholder with the native binary, so Turbo, which
+# spawns the binary directly, fails with "Exec format error" when the script is blocked.
+grep -Eq 'NPM_CONFIG_ALLOW_SCRIPTS=pnpm|allow-scripts=pnpm' "${DOCKERFILE}" ||
+    fail "Dockerfile must allowlist pnpm's install scripts for npm 12"
+
 # The work_queue lock helper was removed from the fleet.
 grep -Eq "(^|[[:space:]])work_queue([[:space:]]|$)" "${DOCKERFILE}" && fail "work_queue must not be shipped"
 
