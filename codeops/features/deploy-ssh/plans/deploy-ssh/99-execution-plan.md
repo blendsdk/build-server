@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 16:06
-> **Progress**: 21/39 tasks (54%)
+> **Last Updated**: 2026-10-07 16:08
+> **Progress**: 25/39 tasks (64%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -195,14 +195,14 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-03-connectivity-check.md`](03-03-connectivity-check.md) §Implementation Details
 **Objective**: Implement the script and the `check-ssh` command; wire tests and lint.
 
-- [ ] 3.2.1 Write `deploy-ssh-check.sh` (test mode, `--learn`, exit codes, `Host` parsing, strict host-key handling) — `deploy-ssh-check.sh`
-- [ ] 3.2.2 Add the `check-ssh <org>` command and usage line — `fleet.sh`
-- [ ] 3.2.3 Wire `deploy-ssh-check.sh` into the shellcheck list and the spec suite into `test/verify.sh` (the impl suite is wired in 3.3.1 — PF-009) — `test/verify.sh`
-- [ ] 3.2.4 Run the Phase 3 spec cases; verify green
+- [x] 3.2.1 Write `deploy-ssh-check.sh` (test mode, `--learn`, exit codes, `Host` parsing, strict host-key handling) — `deploy-ssh-check.sh` ✅ (completed: 2026-10-07 16:08)
+- [x] 3.2.2 Add the `check-ssh <org>` command and usage line — `fleet.sh` ✅ (completed: 2026-10-07 16:08)
+- [x] 3.2.3 Wire `deploy-ssh-check.sh` into the shellcheck list and the spec suite into `test/verify.sh` (the impl suite is wired in 3.3.1 — PF-009) — `test/verify.sh` ✅ (completed: 2026-10-07 16:08)
+- [x] 3.2.4 Run the Phase 3 spec cases; verify green ✅ (completed: 2026-10-07 16:08)
 
 **Deliverables**:
-- [ ] `deploy-ssh-check` reports PASS/FAIL with exit codes 0/1/2 and learns keys without weakening verification
-- [ ] `fleet.sh check-ssh <org>` runs it and propagates the exit code
+- [x] `deploy-ssh-check` reports PASS/FAIL with exit codes 0/1/2 and learns keys without weakening verification
+- [x] `fleet.sh check-ssh <org>` runs it and propagates the exit code
 
 **Verify**: `bash test/deploy-ssh-check.spec.test.sh && bash test/fleet.spec.test.sh`
 
