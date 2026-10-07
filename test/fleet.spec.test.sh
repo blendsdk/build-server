@@ -553,4 +553,77 @@ set -e
     fail "down must not delete files inside deploy-ssh/alpha"
 echo "PASS: down preserves deploy-ssh folders and their contents"
 
+# --- check-ssh runs the deploy check in one runner ------------------------------------------
+# ST-29: check-ssh must run deploy-ssh-check as the docker user inside the merged compose
+# invocation and propagate a successful exit code.
+S="${T}/check-ssh"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" check-ssh Alpha >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "check-ssh Alpha should succeed"
+}
+CHECK_LINE="$(grep -F 'exec -u docker alpha deploy-ssh-check' "${S}/trace" | head -1)"
+[ -n "${CHECK_LINE}" ] || fail "check-ssh must exec deploy-ssh-check as the docker user"
+case "${CHECK_LINE}" in
+    *'-f docker-compose.yml -f docker-compose.generated.yml'*) ;;
+    *) fail "check-ssh must use the merged compose invocation: ${CHECK_LINE}" ;;
+esac
+echo "PASS: check-ssh runs deploy-ssh-check as the docker user"
+
+# --- check-ssh requires exactly one organization ---------------------------------------------
+# ST-30: without an organization the command must fail with a usage message.
+S="${T}/check-ssh-usage"
+new_sandbox "${S}"
+set +e
+run_fleet "${S}" check-ssh >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "check-ssh without an organization must fail"
+grep -qi 'usage' "${S}/out" ||
+    fail "check-ssh without an organization must print a usage message"
+echo "PASS: check-ssh without an organization prints usage and fails"
+
+# --- check-ssh reports an unknown organization -----------------------------------------------
+# ST-31: an unknown organization must fail with the standard unknown-organization error.
+S="${T}/check-ssh-unknown"
+new_sandbox "${S}"
+set +e
+run_fleet "${S}" check-ssh NoSuchOrg >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "check-ssh with an unknown organization must fail"
+grep -q 'unknown organization' "${S}/out" ||
+    fail "check-ssh must report an unknown organization"
+echo "PASS: check-ssh reports an unknown organization"
+
+# --- check-ssh propagates the compose exec exit code -----------------------------------------
+# ST-32: the exit status of the compose exec must become the command's exit status.
+S="${T}/check-ssh-exit"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+set +e
+DOCKER_EXIT=7 run_fleet "${S}" check-ssh Alpha >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -eq 7 ] || fail "check-ssh must propagate the compose exec exit code (got ${CODE})"
+echo "PASS: check-ssh propagates the compose exec exit code"
+
+# --- check-ssh fails fast when the organization has no deploy_ssh ----------------------------
+# ST-40: an organization without deploy_ssh must fail before any compose call.
+S="${T}/check-ssh-no-deploy"
+new_sandbox "${S}"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" check-ssh Alpha >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "check-ssh for an organization without deploy_ssh must fail"
+grep -qF "organization 'alpha' has no deploy_ssh configured" "${S}/out" ||
+    fail "check-ssh must name the missing deploy_ssh configuration"
+grep -qF 'compose exec' "${S}/trace" &&
+    fail "check-ssh must not call compose exec without deploy_ssh"
+echo "PASS: check-ssh fails fast when the organization has no deploy_ssh"
+
 echo "fleet spec tests: PASS"

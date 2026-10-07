@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:51
-> **Progress**: 18/39 tasks (46%)
+> **Last Updated**: 2026-10-07 16:06
+> **Progress**: 21/39 tasks (54%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -169,7 +169,8 @@ task-size criteria in `quality-checklist.md`)
 
 ## Phase 3: Connectivity check
 
-> **Phase baseline tree**: _(recorded by the exec-plan skill from a temporary-index snapshot)_
+> **Phase baseline tree**: 2b9aa4f06eb999c8d539be1366802c7897d8e378
+> **Expected changes** (scope: strict): `deploy-ssh-check.sh` (new), `fleet.sh`, `test/deploy-ssh-check.spec.test.sh` (new), `test/deploy-ssh-check.impl.test.sh` (new), `test/fleet.spec.test.sh`, `test/verify.sh`, and plan documents (`99-execution-plan.md`; runtime records as needed)
 > **Lenses**: security
 > **Reasoning**: high — host-key verification semantics drive operator trust decisions
 
@@ -178,12 +179,12 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-03-connectivity-check.md`](03-03-connectivity-check.md) · AR #6, #7, #8, #18, #19, #20
 **Objective**: Pin check/learn behavior and the CLI wrapper as failing tests first.
 
-- [ ] 3.1.1 [spec-author] Write the check-script spec cases ST-20..ST-28, ST-36, ST-37, ST-39 — `test/deploy-ssh-check.spec.test.sh`
-- [ ] 3.1.2 [spec-author] Write the `check-ssh` spec cases ST-29..ST-32, ST-40 — `test/fleet.spec.test.sh`
-- [ ] 3.1.3 Run the spec cases and record the red-phase results (all fail in red because the script does not exist; ST-30 may pass in red if it asserts only a generic usage failure)
+- [x] 3.1.1 [spec-author] Write the check-script spec cases ST-20..ST-28, ST-36, ST-37, ST-39 — `test/deploy-ssh-check.spec.test.sh` ✅ (completed: 2026-10-07 16:06)
+- [x] 3.1.2 [spec-author] Write the `check-ssh` spec cases ST-29..ST-32, ST-40 — `test/fleet.spec.test.sh` ✅ (completed: 2026-10-07 16:06)
+- [x] 3.1.3 Run the spec cases and record the red-phase results (all fail in red because the script does not exist; ST-30 may pass in red if it asserts only a generic usage failure) ✅ (completed: 2026-10-07 16:06)
 
 **Deliverables**:
-- [ ] ST-20..ST-32, ST-36, ST-37, ST-39, ST-40 exist and fail for the expected reason
+- [x] ST-20..ST-32, ST-36, ST-37, ST-39, ST-40 exist and fail for the expected reason
 
 **Verify**: `bash test/deploy-ssh-check.spec.test.sh && bash test/fleet.spec.test.sh` (expected red)
 
