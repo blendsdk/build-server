@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:23
-> **Progress**: 3/39 tasks (8%)
+> **Last Updated**: 2026-10-07 15:25
+> **Progress**: 7/39 tasks (18%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -83,14 +83,14 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-01-orgs-configuration.md`](03-01-orgs-configuration.md) §Implementation Details
 **Objective**: Parse and validate the option, create missing folders, render the mount.
 
-- [ ] 1.2.1 Add `deploy_ssh` parsing and validation to `parse_config()` — `fleet.sh`
-- [ ] 1.2.2 Add `ensure_deploy_dirs()` and call it from `up`/`restart`/`start`/`update`/`update-runners`/`upgrade-all` (for `upgrade-all`: after confirmation and version fetch — PF-007) — `fleet.sh`
-- [ ] 1.2.3 Render the read-only deploy volume, merged with `build_temp` under one `volumes:` key — `fleet.sh`
-- [ ] 1.2.4 Run the Phase 1 spec cases; verify green
+- [x] 1.2.1 Add `deploy_ssh` parsing and validation to `parse_config()` — `fleet.sh` ✅ (completed: 2026-10-07 15:25)
+- [x] 1.2.2 Add `ensure_deploy_dirs()` and call it from `up`/`restart`/`start`/`update`/`update-runners`/`upgrade-all` (for `upgrade-all`: after confirmation and version fetch — PF-007) — `fleet.sh` ✅ (completed: 2026-10-07 15:25)
+- [x] 1.2.3 Render the read-only deploy volume, merged with `build_temp` under one `volumes:` key — `fleet.sh` ✅ (completed: 2026-10-07 15:25)
+- [x] 1.2.4 Run the Phase 1 spec cases; verify green ✅ (completed: 2026-10-07 15:25)
 
 **Deliverables**:
-- [ ] `generate` renders the mount; unsafe paths fail with line-numbered messages
-- [ ] Container-starting commands create missing folders (`0700` + `keys/`); `generate`/`status` do not
+- [x] `generate` renders the mount; unsafe paths fail with line-numbered messages
+- [x] Container-starting commands create missing folders (`0700` + `keys/`); `generate`/`status` do not
 
 **Verify**: `bash test/orgs.spec.test.sh && bash test/fleet.spec.test.sh`
 
