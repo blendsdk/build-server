@@ -3,7 +3,7 @@
 > **Artifact**: Phase reviews for the deploy-ssh execution plan
 > **Mode**: auto-design (eligible technical fixes selected and recorded; no reserved decisions arose)
 > **CodeOps Artifact Schema**: 1
-> **Last Updated**: 2026-10-07 16:22
+> **Last Updated**: 2026-10-07 16:33
 
 ## Phase 1 — Fleet configuration and mounting
 
@@ -61,3 +61,17 @@ No 🔴 findings. The single 🟠 (RV-101) was fixed; the fix diff received the 
 No 🔴 findings. The two 🟠 fixes received the one permitted scoped re-review.
 
 **Re-review result (2026-10-07 16:22):** all seven findings resolved; mutation checks confirm the new assertions are non-tautological; no regressions and no new findings. Accepted observations (non-blocking): the leading-`-` allowlist arm and the resolved-port check are inspection-only (low risk; both guards verified present), a nested re-jump on a hop is not inspected (exotic; single-hop and comma-chains are covered), and the `03-03` test-list line omitted the new cases — fixed in a follow-up doc edit.
+
+## Phase 4 — Packaging, documentation, and release validation
+
+- Baseline tree: `8d388c592c658dd26712bcb4e231a0c89cf9fc62` · phase diff: 709 lines (`Dockerfile`, `bootstrap.sh`, `orgs.conf`, two spec suites, the docs set)
+- Reviewers (independent contexts): correctness-reviewer, security-auditor
+- Verify at review time: `bash test/verify.sh` → PASS; `npm ci && npm run docs:build` → PASS (2026-10-07 16:27)
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| RV-501 | 🟡 | The troubleshooting row recommended `up` to recreate a container, but `up` reuses the existing container and its bind mount | Fixed: the fix now says `./fleet.sh restart` |
+| RV-502 | 🟡 | The manual keyscan example used the `Host` alias `app-prod`, which `ssh-keyscan` cannot resolve (it does not read the SSH config) | Fixed: the example uses the resolved `HostName` with an explanatory comment |
+| SA-501 | 🟡 | `deploy-ssh-check.sh` was committed `0644` while every sibling runtime script is `0755`; `cp -p` would install it non-executable | Fixed: the file is committed `100755` and ST-34 asserts the installed file is executable |
+
+No 🔴/🟠 findings; no re-review is required by the gate. All fixes were verified with the full suite and the docs build.

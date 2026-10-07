@@ -130,8 +130,9 @@ bastion key first, restart the runner, then re-run `--learn`.
 ### Or collect manually
 
 ```bash
-# On the runner, for a directly reachable target:
-ssh-keyscan -t ed25519,rsa -p 22 app-prod
+# On the runner, for a directly reachable target — use the resolved HostName, not a Host alias
+# (ssh-keyscan does not read the SSH config):
+ssh-keyscan -t ed25519,rsa -p 22 10.20.1.5
 
 # On the bastion, for a private target:
 ssh-keyscan -t ed25519,rsa -p 22 10.20.1.5

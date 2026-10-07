@@ -37,7 +37,7 @@ service.
 | `/run/deploy-ssh` is missing | The organization does not declare `deploy_ssh=` | Add the option to `orgs.conf` and run `./fleet.sh up` |
 | `~/.ssh/config` has no `Include ~/.ssh/deploy.d/config` line | The updated folder was not staged | Restart the runner (`./fleet.sh restart`); staging happens only at container boot |
 | `WARNING: deploy-ssh staging failed ...` or an empty `~/.ssh/deploy.d/` | The runner image predates the deploy SSH feature and does not run the staging step | Rebuild the image with `./fleet.sh build` (or `./fleet.sh upgrade-all`), then `./fleet.sh up` |
-| `./fleet.sh start` after the folder was removed leaves the mount empty | `start` reuses the existing container and its bind mount | Run `./fleet.sh up` (or `restart`) to recreate the container now that the folder exists |
+| `./fleet.sh start` after the folder was removed leaves the mount empty | `start` reuses the existing container and its bind mount | Run `./fleet.sh restart` to recreate the container now that the folder exists |
 
 ## `fleet.sh` says Docker is not accessible
 

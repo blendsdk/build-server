@@ -232,6 +232,8 @@ grep -qF "${EXPECTED_AUTH}" "${T}/trace" ||
 for file in .dockerignore bootstrap.sh fleet.sh deploy-ssh-check.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
     [ -f "${T}/install/${file}" ] || fail "runtime file ${file} was not installed"
 done
+[ -x "${T}/install/deploy-ssh-check.sh" ] ||
+    fail "the installed deploy-ssh-check.sh must be executable"
 [ -e "${T}/install/.git" ] && fail "a clean install must not contain .git"
 [ -d "${T}/install/test" ] && fail "a clean install must not contain the test tree"
 [ -d "${T}/install/docs" ] && fail "a clean install must not contain the docs tree"
