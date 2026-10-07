@@ -284,7 +284,7 @@ configure_orgs() {
 
     {
         echo "# Runner fleet — edit and run ./fleet.sh up to apply changes."
-        echo "# Format: <name> [url=...] [context=...] [build_temp=1]"
+        echo "# Format: <name> [url=...] [context=...] [build_temp=1] [deploy_ssh=...]"
         for org in ${ORGS}; do
             echo "${org}"
         done
@@ -370,6 +370,7 @@ INSTALL_FILES=(
     bootstrap.sh
     docker-compose.yml
     Dockerfile
+    deploy-ssh-check.sh
     entrypoint.sh
     fleet.sh
     start.sh

@@ -43,6 +43,10 @@ RUN ln -sf /bin/bash /bin/sh
 COPY start.sh entrypoint.sh /
 RUN chmod +x /start.sh /entrypoint.sh
 
+# Connectivity check for deploy SSH, run by operators inside the runner.
+COPY deploy-ssh-check.sh /usr/local/bin/deploy-ssh-check
+RUN chmod +x /usr/local/bin/deploy-ssh-check
+
 # Host-provided package-manager credentials and Docker registry configuration.
 COPY ./.npmrc /home/docker/.npmrc
 COPY ./.yarnrc /home/docker/.yarnrc

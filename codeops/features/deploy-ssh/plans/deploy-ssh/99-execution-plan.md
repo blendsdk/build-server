@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 16:23
-> **Progress**: 30/39 tasks (77%)
+> **Last Updated**: 2026-10-07 16:24
+> **Progress**: 34/39 tasks (87%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -250,13 +250,13 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-04-packaging-and-docs.md`](03-04-packaging-and-docs.md) §Implementation Details
 **Objective**: Ship the script with the image and the installer.
 
-- [ ] 4.2.1 Install `deploy-ssh-check.sh` as `/usr/local/bin/deploy-ssh-check` — `Dockerfile`
-- [ ] 4.2.2 Add `deploy-ssh-check.sh` to `INSTALL_FILES` — `bootstrap.sh`
-- [ ] 4.2.3 Update the grammar headers with `[deploy_ssh=<path>]` — `orgs.conf`, `bootstrap.sh` (PF-011)
-- [ ] 4.2.4 Run the Phase 4 spec suites; verify green
+- [x] 4.2.1 Install `deploy-ssh-check.sh` as `/usr/local/bin/deploy-ssh-check` — `Dockerfile` ✅ (completed: 2026-10-07 16:24)
+- [x] 4.2.2 Add `deploy-ssh-check.sh` to `INSTALL_FILES` — `bootstrap.sh` ✅ (completed: 2026-10-07 16:24)
+- [x] 4.2.3 Update the grammar headers with `[deploy_ssh=<path>]` — `orgs.conf`, `bootstrap.sh` (PF-011) ✅ (completed: 2026-10-07 16:24)
+- [x] 4.2.4 Run the Phase 4 spec suites; verify green ✅ (completed: 2026-10-07 16:24)
 
 **Deliverables**:
-- [ ] New and existing installs carry the script; the manifest records it
+- [x] New and existing installs carry the script; the manifest records it
 
 **Verify**: `bash test/dockerfile.spec.test.sh && bash test/bootstrap.spec.test.sh`
 
