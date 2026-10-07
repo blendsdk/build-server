@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:22
-> **Progress**: 2/39 tasks (5%)
+> **Last Updated**: 2026-10-07 15:23
+> **Progress**: 3/39 tasks (8%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -65,14 +65,14 @@ task-size criteria in `quality-checklist.md`)
 
 - [x] 1.1.1 [spec-author] Write the parser and rendering spec cases ST-1..ST-10, ST-38, ST-41 — `test/orgs.spec.test.sh` ✅ (completed: 2026-10-07 15:22)
 - [x] 1.1.2 [spec-author] Write the auto-create and never-delete spec cases ST-11..ST-13 — `test/fleet.spec.test.sh` ✅ (completed: 2026-10-07 15:22)
-- [ ] 1.1.3 Run both spec suites and record the red-phase results (behavior-adding cases fail; negative/regression cases ST-2, ST-12, ST-13 pass in red; existing cases stay green)
+- [x] 1.1.3 Run both spec suites and record the red-phase results (behavior-adding cases fail; negative/regression cases ST-2, ST-12, ST-13 pass in red; existing cases stay green) ✅ (completed: 2026-10-07 15:23)
 
 > Mark spec-test tasks with `[spec-author]`: in a repo with an active quality profile, the
 > exec-plan skill dispatches the spec-test-author agent for them; the marker is inert without a
 > profile and the session writes the tests itself.
 
 **Deliverables**:
-- [ ] ST-1..ST-13, ST-38, ST-41 exist; behavior-adding cases fail in red (ST-2, ST-12, ST-13 pass in red)
+- [x] ST-1..ST-13, ST-38, ST-41 exist; behavior-adding cases fail in red (ST-2, ST-12, ST-13 pass in red)
 
 **Verify**: `bash test/orgs.spec.test.sh && bash test/fleet.spec.test.sh` (expected red)
 
