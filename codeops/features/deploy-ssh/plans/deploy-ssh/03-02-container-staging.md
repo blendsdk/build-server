@@ -37,7 +37,8 @@ stage_deploy_ssh():
   if DEPLOY_SSH_SOURCE is not a directory:            # no mount: nothing to do
       return 0
   if RUNNER_USER_HOME/.ssh is missing:                # fresh or overridden home
-      create it 0700, chown docker:docker            # failures -> warn and return 0
+      create it 0700, chown docker:docker            # mkdir fails -> warn and return 0;
+                                                     # chmod/chown fail -> warn and continue
   if removing ~/.ssh/deploy.d fails:                  # AR #14: always a fresh copy
       warn (naming the step), return 0                # AR #9: never block the runner
   if creating ~/.ssh/deploy.d fails:
@@ -82,11 +83,12 @@ the defaults; no behavior changes with them.
 ### Example 1: Failures never block the runner
 
 ```text
-WARNING: deploy-ssh staging failed (cannot copy /run/deploy-ssh); continuing without deploy SSH
+WARNING: deploy-ssh staging failed to copy /run/deploy-ssh to /home/docker/.ssh/deploy.d; the runner starts without deploy SSH
 Starting Docker daemon...
 ```
 
-The warning goes to stderr; the container start sequence is unchanged (AR #9).
+The warning goes to stderr and names the failed step and paths; the container start sequence is
+unchanged (AR #9).
 
 ## Error Handling
 

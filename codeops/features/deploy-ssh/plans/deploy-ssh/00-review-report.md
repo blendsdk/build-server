@@ -3,7 +3,7 @@
 > **Artifact**: Phase reviews for the deploy-ssh execution plan
 > **Mode**: auto-design (eligible technical fixes selected and recorded; no reserved decisions arose)
 > **CodeOps Artifact Schema**: 1
-> **Last Updated**: 2026-10-07 15:57
+> **Last Updated**: 2026-10-07 16:03
 
 ## Phase 1 — Fleet configuration and mounting
 
@@ -39,3 +39,5 @@ No 🔴/🟠 findings; no reserved decisions arose; nothing deferred. The accept
 | SA-103 | 🟡 | Symlink and pre-planted-path properties were not pinned by tests | Fixed: ST-43 (source symlink preserved), ST-44 (pre-planted `config.new` symlink not followed), ST-45 (fresh home `.ssh` normalization) |
 
 No 🔴 findings. The single 🟠 (RV-101) was fixed; the fix diff received the one permitted scoped re-review.
+
+**Re-review result (2026-10-07 16:03):** all six findings resolved; mutation checks confirm the new assertions are non-tautological; no regressions and no new findings. Two low-priority observations were noted (two sub-properties are inspection-only, and the spec example text) — the example was aligned in a follow-up doc edit.
