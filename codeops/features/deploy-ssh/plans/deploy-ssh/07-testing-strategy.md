@@ -90,7 +90,7 @@
 | --- | ---------------- | -------------------------- | ------ |
 | ST-33 | Static Dockerfile inspection | The Dockerfile installs `deploy-ssh-check.sh` as `/usr/local/bin/deploy-ssh-check` and marks it executable | Req R10 / AR #25 |
 | ST-34 | Bootstrap spec with the fake repository providing `deploy-ssh-check.sh` | The script is installed into the install directory and listed in `.build-server-manifest` | Req R10 / AR #25 |
-| ST-35 | Static inspection of `.gitignore` and `.dockerignore` | Both exclude `deploy-ssh/` (git) respectively `deploy-ssh` (build context) | AR #5 |
+| ST-35 | Static inspection of `.gitignore` and `.dockerignore` | `.gitignore` excludes `/deploy-ssh/` (root-anchored) and `.dockerignore` excludes `deploy-ssh` (build context) | AR #5, AR #28 |
 
 > **⚠️ AUTHORING RULE:** Derive expectations from the specification documents above. Do NOT
 > imagine or infer what the implementation will produce. If the expected output cannot be

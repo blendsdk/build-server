@@ -1,6 +1,6 @@
 # Ambiguity Register: deploy-ssh material for runner containers
 
-> **Status**: ✅ GATE PASSED — all 27 items resolved
+> **Status**: ✅ GATE PASSED — all 27 planning items resolved; 1 runtime item resolved (AR-28)
 > **Last Updated**: 2026-10-07 14:07
 
 | # | Category | Ambiguity / Gap | Options Presented | User Decision | Status |
@@ -32,6 +32,7 @@
 | 25 | Naming | Repository location and install wiring of the check script | A (rec.): `deploy-ssh-check.sh` at the repo root, installed as `/usr/local/bin/deploy-ssh-check`; added to `INSTALL_FILES`, shellcheck list, `verify.sh` · B: new `scripts/` directory | User accepted recommendation: root script wired into install, shellcheck, and verify | ✅ Resolved |
 | 26 | Scope, UX | Documentation deliverables | A (rec.): new `docs/guide/deploy-ssh.md` + sidebar; update `files.md`, `security.md`, `upgrades.md`, `troubleshooting.md`, `cli.md` · B: guide page + sidebar only | User accepted recommendation: new guide page plus the listed updates | ✅ Resolved |
 | 27 | Scope | Explicit exclusions for this plan | A (rec.): no CI-side setup, no per-repo secrets, no agent forwarding, no SSH certificates, no boot-time check, no `accept-new` default, no live folder sync · B: include some of these | User accepted recommendation: exclusions as listed | ✅ Resolved |
+| 28 | Technical (runtime) | The planned unanchored `.gitignore` pattern `deploy-ssh/` also ignores the CodeOps feature folder `codeops/features/deploy-ssh/`, blocking new plan artifacts from version control | A: root-anchor to `/deploy-ssh/` and align the spec + ST-35 · B: add a `!codeops/features/deploy-ssh/` negation | Authority: AI — delegated by --auto-design · A (see the AR-28 note) | ✅ Resolved |
 
 ### Resolution Notes
 
@@ -52,3 +53,14 @@
 **AR-22:** Because staging happens at container boot, file changes on the host require a runner restart; the plan documents the interruption of running jobs rather than adding a live-sync mechanism.
 
 **AR-23:** Compatibility is one-directional: an older image ignores the deployment mount and the new option has no effect until `fleet.sh build`/`upgrade-all` rebuilds the image; existing configurations that do not use `deploy_ssh` are unaffected either way.
+
+**AR-28 (runtime):** The exclusion added in task 1.3.3 was planned as `deploy-ssh/`, which gitignore matches at any depth and therefore also ignores the feature folder `codeops/features/deploy-ssh/`. Delegated resolution — auto-design, eligible implementation-mechanism correction (not reserved, no scope change):
+- Eligibility: gitignore pattern semantics inside the approved secret-exclusion policy; no product behavior, scope, or acceptance-criteria change.
+- Objective: exclude the deploy folder without shadowing CodeOps artifact paths.
+- Decision: root-anchor the pattern to `/deploy-ssh/` in `.gitignore`; align the owning spec and ST-35.
+- Evidence: `git add codeops/features/deploy-ssh` printed "ignored by one of your .gitignore files"; a leading `/` anchors the pattern to the repository root; R1 places deploy folders only at `<root>/deploy-ssh/`.
+- Rejected alternatives: `!codeops/features/deploy-ssh/` negation (fragile; recurs for any future nested `deploy-ssh` name); keeping the unanchored pattern and adding artifacts with `-f` (silently breaks tracking).
+- Strongest counterargument: the spec test changes after it went green; mitigated because the owning spec (`03-04`) is corrected in this step and the expectation tightens to exactly the root folder while preserving the same protection.
+- Confidence: High — would change only if deploy folders became valid outside `<root>/deploy-ssh/` (R1 forbids that).
+- Hardening: not required (single viable technical correction, trivially reversible).
+- Policy version: 1 · Root invocation ID: `deploy-ssh-exec-20261007` · Reopen triggers: R1 convention change; gitignore semantics change.

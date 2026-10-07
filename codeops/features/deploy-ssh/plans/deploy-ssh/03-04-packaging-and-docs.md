@@ -52,7 +52,7 @@ run; the manifest loop removes files that disappear upstream, so no migration co
 
 ### Ignore files
 
-- `.gitignore`: add `deploy-ssh/` under the host-local secrets section (`ssh/` is the precedent).
+- `.gitignore`: add `/deploy-ssh/` (root-anchored so the CodeOps feature folder `codeops/features/deploy-ssh/` is not shadowed) under the host-local secrets section (`ssh/` is the precedent).
 - `.dockerignore`: add `deploy-ssh` so keys are never sent as build context (the Dockerfile does
   not copy the folder, but contexts should not carry secrets — AR #5).
 - The R1 path restriction (PF-003) is what makes these fixed entries sufficient: every deploy

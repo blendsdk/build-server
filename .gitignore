@@ -5,7 +5,7 @@
 .bunfig.toml
 config.json
 ssh/
-deploy-ssh/
+/deploy-ssh/
 npmrc
 yarnrc
 

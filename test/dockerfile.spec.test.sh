@@ -58,7 +58,7 @@ DOCKERIGNORE="${ROOT}/.dockerignore"
 [ -f "${GITIGNORE}" ] || fail ".gitignore is missing"
 [ -f "${DOCKERIGNORE}" ] || fail ".dockerignore is missing"
 
-grep -Eq '^[[:space:]]*deploy-ssh/[[:space:]]*$' "${GITIGNORE}" ||
+grep -Eq '^[[:space:]]*/deploy-ssh/[[:space:]]*$' "${GITIGNORE}" ||
     fail ".gitignore must exclude the deploy-ssh/ directory so keys are never committed"
 
 grep -Eq '^[[:space:]]*deploy-ssh[[:space:]]*$' "${DOCKERIGNORE}" ||

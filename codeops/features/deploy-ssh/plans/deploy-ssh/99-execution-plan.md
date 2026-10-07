@@ -2,7 +2,7 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:37
+> **Last Updated**: 2026-10-07 15:38
 > **Progress**: 11/39 tasks (28%)
 > **CodeOps Artifact Schema**: 1
 
@@ -103,7 +103,7 @@ task-size criteria in `quality-checklist.md`)
 
 - [x] 1.3.1 [spec-author] Author the ignore-file spec case ST-35 and record its red phase — `test/dockerfile.spec.test.sh` ✅ (completed: 2026-10-07 15:27)
 - [x] 1.3.2 Extend `test/fleet.impl.test.sh` (auto-create on `restart`/`update`/`update-runners`/`upgrade-all`, idempotent rendering, validation failure preserves the previous output, sentinel files survive `clean --yes`/`upgrade-all --yes`) — `test/fleet.impl.test.sh` ✅ (completed: 2026-10-07 15:27)
-- [x] 1.3.3 Add `deploy-ssh/` to `.gitignore` and `deploy-ssh` to `.dockerignore` ✅ (completed: 2026-10-07 15:37)
+- [x] 1.3.3 Add the `deploy-ssh` exclusions to `.gitignore` (root-anchored `/deploy-ssh/`, see AR-28) and `.dockerignore` ✅ (completed: 2026-10-07 15:37)
 - [x] 1.3.4 Full verification — `bash test/verify.sh` ✅ (completed: 2026-10-07 15:37)
 
 **Deliverables**:
