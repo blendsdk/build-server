@@ -3,7 +3,7 @@
 > **Artifact**: Phase reviews for the deploy-ssh execution plan
 > **Mode**: auto-design (eligible technical fixes selected and recorded; no reserved decisions arose)
 > **CodeOps Artifact Schema**: 1
-> **Last Updated**: 2026-10-07 16:03
+> **Last Updated**: 2026-10-07 16:18
 
 ## Phase 1 — Fleet configuration and mounting
 
@@ -41,3 +41,21 @@ No 🔴/🟠 findings; no reserved decisions arose; nothing deferred. The accept
 No 🔴 findings. The single 🟠 (RV-101) was fixed; the fix diff received the one permitted scoped re-review.
 
 **Re-review result (2026-10-07 16:03):** all six findings resolved; mutation checks confirm the new assertions are non-tautological; no regressions and no new findings. Two low-priority observations were noted (two sub-properties are inspection-only, and the spec example text) — the example was aligned in a follow-up doc edit.
+
+## Phase 3 — Connectivity check
+
+- Baseline tree: `2b9aa4f06eb999c8d539be1366802c7897d8e378` · phase diff: 1198 lines (`deploy-ssh-check.sh`, `fleet.sh`, two new suites, `fleet.spec.test.sh`, `verify.sh`, plan docs)
+- Reviewers (independent contexts): correctness-reviewer, security-auditor
+- Verify at review time: `bash test/verify.sh` → PASS (2026-10-07 16:10)
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| RV-301 | 🟠 | `--learn` through a bastion discarded the explicit `user@` from `ProxyJump`: real `ssh -G` always prints a `user` line, so the fallback never applied; the test stubs masked it | Fixed: the explicit jump user wins and the dump user is only a fallback; an impl case asserts `deploy@bastion.corp` with a `user someother` bastion dump |
+| SA-301 | 🟠 | Remote command injection on the bastion: the keyscan command string concatenated unvalidated resolved values (a `HostName` with backticks or `$( )` executes on the bastion) | Fixed: resolved host/user/port values are allowlist-validated before use (exit 2); ST-46 covers it |
+| SA-302 | 🟠 | Strict host-key checking was not enforced on bastion hops: the learn keyscan hop omitted the flags, and test-mode `-o` options do not propagate to the implicit jump | Fixed: the keyscan hop forces the strict flags; test mode resolves every hop through `ssh -G` and fails the host when `StrictHostKeyChecking` is not `yes` (ST-47 plus impl cases) |
+| RV-302 | 🟡 | Successful `--learn` output omitted the specified install/restart instruction | Fixed: printed after collected keys; ST-25/ST-27 assert it |
+| RV-303 | 🟡 | The changed-key bastion diagnostic was untested | Fixed: an impl case asserts the replacement instruction and the absence of the Host-block diagnostic |
+| SA-303 | 🟡 | Config-derived values could smuggle `ssh` arguments (leading `-`) | Fixed by the same allowlist validation |
+| SA-304 | 🟡 | The suites did not pin the strict-verification and no-write properties | Fixed: option assertions on every connection path and a learn no-write check |
+
+No 🔴 findings. The two 🟠 fixes received the one permitted scoped re-review.

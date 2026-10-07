@@ -72,6 +72,12 @@ on a key SSH learned at runtime: the host folder remains the source of truth, an
 is replaced at every boot, so run the check right after a runner restart for a pinning verdict
 (AR #8, PF-013).
 
+When a target uses a jump, the implicit bastion connection cannot inherit command-line options, so
+the check resolves every hop through `ssh -G` and requires `StrictHostKeyChecking yes` in each
+hop's effective configuration; a host whose bastion is not strictly verified reports
+`FAIL <host> - bastion '<hop>' host-key checking is not strict (set StrictHostKeyChecking yes for it)`
+(SA-302).
+
 After all hosts, the script prints `deploy-ssh-check: <ok> of <total> hosts passed`; when any host
 failed it also prints the hint `hint: run 'deploy-ssh-check --learn <host>' to collect a failing
 host key`. Exit code: `0` all passed, `1` at least one failed, `2` usage/config error (AR #20).
@@ -105,8 +111,9 @@ At least one host is required; zero hosts is a usage error (exit `2`). For each 
      pinned entry (remove the old line) instead of appending a new one.
    - Any other bastion failure prints `FAIL <bastion> - <last stderr line>` and skips that host.
    - On success, run
-     `ssh [-p <effective jump port>] [<user>@]<effective jump host> 'ssh-keyscan -t ed25519,rsa -p <target port> <resolved target name>'`
-     and print the collected lines (keyed per step 2).
+     `ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=yes [-p <effective jump port>] [<user>@]<effective jump host> 'ssh-keyscan -t ed25519,rsa -p <target port> <resolved target name>'`
+     and print the collected lines (keyed per step 2). Successful output ends with the install
+     instruction: `Append the lines above to the deploy folder's known_hosts on the host, restart the runner, then re-run --learn.`
 4. Chained jumps (`proxyjump` containing `,`) are unsupported: print
    `deploy-ssh-check: --learn does not support chained jumps ('<proxyjump>'); collect the keys manually`
    and exit `2` (AR #27). Manual `ssh-keyscan` on the last hop still works and is documented.
@@ -117,9 +124,12 @@ At least one host is required; zero hosts is a usage error (exit `2`). For each 
 install/restart instruction (AR #7, #19). Exit code: `0` when every requested host produced keys,
 `1` when any host failed, `2` for usage/config errors (AR #20).
 
-The `[user@]host[:port]` parser handles the optional user and optional numeric port; anything it
-cannot parse is a configuration error (exit `2`). Bracketed IPv6 literals are not supported by
-`--learn`; collect those keys manually with `ssh-keyscan` on the bastion (PF-018).
+The `[user@]host[:port]` parser handles the optional user and optional numeric port. Resolved
+target and bastion hostnames, users, and ports are validated against a strict allowlist
+(`A-Za-z0-9._-`, no leading `-`; ports decimal) before use, because they feed ssh argv and a remote
+shell command; unsupported values are configuration errors (exit `2`). Bracketed IPv6 literals are
+not supported by `--learn`; collect those keys manually with `ssh-keyscan` on the bastion (PF-018,
+SA-301, SA-303).
 
 ### `fleet.sh check-ssh <org>`
 
@@ -175,6 +185,8 @@ Append the lines above to the deploy folder's known_hosts on the host, restart t
 | Bastion authentication or network failure during `--learn` | `FAIL <bastion> - <reason>`; skip the host; exit `1` | PF-012 |
 | Bastion presents a changed key | Replacement instruction (remove the old pinned line); skip the host; exit `1` | PF-012 |
 | Aliased target or bastion (`HostName` / `HostKeyAlias`) | Keyscan targets and printed entries use the resolved name | PF-002 |
+| A resolved value contains unsupported characters (host, user, or port) | Configuration error (exit `2`); values are validated before they reach ssh or a remote shell | SA-301, SA-303 |
+| Test mode with a jump whose effective configuration is not `StrictHostKeyChecking yes` | `FAIL` naming the hop; the host counts as failed | SA-302 |
 | Bracketed IPv6 learn target | Configuration error (exit `2`) with the manual-keyscan note | PF-018 |
 | `Host` line with an inline comment | Tokenization stops at `#`; `#` inside a token is literal | PF-019 |
 | Chained jumps in `--learn` | Unsupported message; exit `2` | #27 |

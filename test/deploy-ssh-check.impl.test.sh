@@ -176,6 +176,16 @@ run_check() {
     set -e
 }
 
+# Assert that every ssh invocation recorded for a fixed argv pattern is both strictly verified and
+# non-interactive. The pattern selects one class of call (target, bastion attempt, keyscan hop).
+assert_connection_options() {
+    local pattern="$1" label="$2"
+    grep -F "${pattern}" "${TRACE}" | grep -qF 'StrictHostKeyChecking=yes' ||
+        fail "${label}: StrictHostKeyChecking=yes is missing"
+    grep -F "${pattern}" "${TRACE}" | grep -qF 'BatchMode=yes' ||
+        fail "${label}: BatchMode=yes is missing"
+}
+
 # --- impl-01: mixed-case Host keyword and blank lines -----------------------------------------
 new_case impl-01
 write_config 'host app-lower
@@ -315,5 +325,82 @@ grep -qF 'skipped pattern' "${OUT}" &&
 grep -qF 'ssh -G app-*' "${TRACE}" &&
     fail "impl-09: the config pattern must not be resolved"
 echo "PASS: impl-09 explicit hosts override the default selection"
+
+# --- impl-10: a changed bastion key prints the replacement instruction, not the Host-block one --
+new_case impl-10
+write_config 'Host app-prod
+'
+SSH_G_DUMP='hostname app-prod
+port 22
+proxyjump deploy@bastion.corp:2222'
+SSH_G_DUMP_bastion_corp='hostname bastion.corp
+port 2222'
+SSH_EXIT=255
+SSH_STDERR='REMOTE HOST IDENTIFICATION HAS CHANGED'
+run_check "${H}" "${OUT}" --learn app-prod
+[ "${CODE}" -eq 1 ] || fail "impl-10: expected exit 1, got ${CODE}"
+grep -qF 'presents a changed key' "${OUT}" ||
+    fail "impl-10: the changed-key diagnostic is missing"
+grep -qF 'Remove its stale entry' "${OUT}" ||
+    fail "impl-10: the stale-entry instruction is missing"
+grep -qF 'Host block' "${OUT}" &&
+    fail "impl-10: a changed key must not print the Host-block diagnostic"
+grep -q '^ssh-keyscan ' "${TRACE}" && fail "impl-10: no target keyscan may run when the bastion fails"
+echo "PASS: impl-10 a changed bastion key prints the replacement instruction"
+
+# --- impl-11: the explicit jump user wins over the bastion's configured user --------------------
+new_case impl-11
+write_config 'Host app-prod
+'
+SSH_G_DUMP='hostname app-prod
+port 22
+proxyjump deploy@bastion.corp:2222'
+SSH_G_DUMP_bastion_corp='hostname bastion.corp
+port 2222
+user someother'
+KEYS_CAN_OUTPUT='app-prod ssh-ed25519 AAAATESTKEY'
+run_check "${H}" "${OUT}" --learn app-prod
+[ "${CODE}" -eq 0 ] || fail "impl-11: expected exit 0, got ${CODE}"
+grep -qF 'deploy@bastion.corp' "${TRACE}" ||
+    fail "impl-11: the connection must use the explicit jump user"
+grep -qF 'someother@bastion.corp' "${TRACE}" &&
+    fail "impl-11: the bastion's configured user must not override the explicit jump user"
+echo "PASS: impl-11 the explicit jump user wins over the bastion's configured user"
+
+# --- impl-12: every recorded ssh connection is strict and non-interactive ----------------------
+new_case impl-12
+write_config 'Host app-prod
+'
+SSH_G_DUMP='hostname app-prod
+port 22
+proxyjump deploy@bastion.corp:2222'
+SSH_G_DUMP_bastion_corp='hostname bastion.corp
+port 2222
+stricthostkeychecking yes'
+KEYS_CAN_OUTPUT='app-prod ssh-ed25519 AAAATESTKEY'
+# Test mode records the target connection; learn mode records the bastion attempt and the
+# keyscan-over-bastion hop. Run both against the same trace so all three classes are present.
+run_check "${H}" "${OUT}"
+[ "${CODE}" -eq 0 ] || fail "impl-12: expected test mode to exit 0, got ${CODE}"
+run_check "${H}" "${OUT}" --learn app-prod
+[ "${CODE}" -eq 0 ] || fail "impl-12: expected learn mode to exit 0, got ${CODE}"
+assert_connection_options 'app-prod true' 'impl-12 target connection'
+assert_connection_options 'deploy@bastion.corp true' 'impl-12 bastion attempt'
+assert_connection_options 'deploy@bastion.corp ssh-keyscan' 'impl-12 keyscan hop'
+echo "PASS: impl-12 every recorded ssh connection is strict and non-interactive"
+
+# --- impl-13: --learn never writes to the runner home ------------------------------------------
+new_case impl-13
+write_config 'Host app-prod
+'
+SSH_G_DUMP='hostname app-prod
+port 22'
+KEYS_CAN_OUTPUT='app-prod ssh-ed25519 AAAATESTKEY'
+before="$(find "${H}" | sort | sha256sum)"
+run_check "${H}" "${OUT}" --learn app-prod
+[ "${CODE}" -eq 0 ] || fail "impl-13: expected exit 0, got ${CODE}"
+after="$(find "${H}" | sort | sha256sum)"
+[ "${before}" = "${after}" ] || fail "impl-13: --learn modified the home tree"
+echo "PASS: impl-13 --learn never writes to the runner home"
 
 echo "deploy-ssh-check impl tests: PASS"

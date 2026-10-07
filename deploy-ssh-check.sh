@@ -20,6 +20,9 @@ MODE="test"
 HOSTS=()
 LITERAL_HOSTS=()
 PATTERNS=()
+JUMP_USER=""
+JUMP_HOST=""
+JUMP_PORT=""
 
 # Print a usage error and exit 2. Every usage problem is a configuration error by contract.
 usage_error() {
@@ -32,6 +35,40 @@ usage_error() {
 dump_field() {
     local dump="$1" key="$2"
     printf '%s\n' "${dump}" | awk -v k="${key}" '$1 == k { print $2; exit }'
+}
+
+# Reject resolved values that are empty, start with '-', or fall outside the host/user allowlist.
+# These values feed ssh argv and a remote shell command, so they are validated before use.
+validate_host_value() {
+    local label="$1" value="$2"
+    case "${value}" in
+        "" | -* | *[!A-Za-z0-9._-]*)
+            usage_error "${label} '${value}' is not supported"
+            ;;
+    esac
+}
+
+# Reject anything but a positive decimal port.
+validate_port_value() {
+    local label="$1" value="$2"
+    case "${value}" in
+        "" | *[!0-9]*)
+            usage_error "${label} '${value}' is not supported"
+            ;;
+    esac
+}
+
+# Parse a jump specification [user@]host[:port] into JUMP_USER, JUMP_HOST, and JUMP_PORT, and
+# validate every resolved piece.
+parse_jump_spec() {
+    JUMP_USER=""
+    JUMP_PORT=""
+    JUMP_HOST="$1"
+    case "${JUMP_HOST}" in *@*) JUMP_USER="${JUMP_HOST%%@*}"; JUMP_HOST="${JUMP_HOST#*@}" ;; esac
+    case "${JUMP_HOST}" in *:*) JUMP_PORT="${JUMP_HOST##*:}"; JUMP_HOST="${JUMP_HOST%:*}" ;; esac
+    validate_host_value "bastion host" "${JUMP_HOST}"
+    [ -z "${JUMP_PORT}" ] || validate_port_value "bastion port" "${JUMP_PORT}"
+    [ -z "${JUMP_USER}" ] || validate_host_value "bastion user" "${JUMP_USER}"
 }
 
 # Return the last non-empty line of a captured stderr file, or a fallback when it is empty.
@@ -91,6 +128,37 @@ collect_hosts() {
     done <"${CONFIG}"
 }
 
+# With a jump, the bastion connection is a separate ssh process that cannot inherit command-line
+# options: its verification depends on its own configuration. Fail the host when any hop is not
+# strictly verified, so a PASS always means every hop was pinned.
+bastions_are_strict() {
+    local host="$1" remaining="$2" hop_spec hop_dump hop_strict
+    while [ -n "${remaining}" ]; do
+        case "${remaining}" in
+            *,*) hop_spec="${remaining%%,*}"; remaining="${remaining#*,}" ;;
+            *) hop_spec="${remaining}"; remaining="" ;;
+        esac
+        parse_jump_spec "${hop_spec}"
+        if [ -n "${JUMP_PORT}" ]; then
+            hop_dump="$(ssh -G -p "${JUMP_PORT}" "${JUMP_HOST}" 2>/dev/null)" || {
+                echo "${SCRIPT_NAME}: invalid SSH configuration for bastion '${JUMP_HOST}'" >&2
+                exit 2
+            }
+        else
+            hop_dump="$(ssh -G "${JUMP_HOST}" 2>/dev/null)" || {
+                echo "${SCRIPT_NAME}: invalid SSH configuration for bastion '${JUMP_HOST}'" >&2
+                exit 2
+            }
+        fi
+        hop_strict="$(dump_field "${hop_dump}" stricthostkeychecking)"
+        if [ "${hop_strict}" != "yes" ]; then
+            echo "FAIL ${host} - bastion '${hop_spec}' host-key checking is not strict (set StrictHostKeyChecking yes for it)"
+            return 1
+        fi
+    done
+    return 0
+}
+
 # Run one strict connection test. Returns 0 for PASS, 1 for FAIL; exits 2 when the SSH
 # configuration itself cannot be resolved.
 test_host() {
@@ -101,6 +169,9 @@ test_host() {
     fi
     jump="$(dump_field "${dump}" proxyjump)"
     case "${jump}" in none) jump="" ;; esac
+    if [ -n "${jump}" ] && ! bastions_are_strict "${host}" "${jump}"; then
+        return 1
+    fi
     err="$(mktemp "${TMPDIR:-/tmp}/deploy-ssh-check.XXXXXX")"
     set +e
     ssh -o BatchMode=yes -o ConnectTimeout="${CONNECT_TIMEOUT}" -o StrictHostKeyChecking=yes \
@@ -150,10 +221,13 @@ learn_direct() {
     ssh-keyscan -t "${KEYSCAN_TYPES}" -p "${port}" "${resolved}" >"${out}" 2>/dev/null
     rc=$?
     set -e
-    print_collected_keys "${out}" "${rc}" "${key_name}" "${resolved}" || rc=1
-    [ "${rc}" -eq 0 ] || rc=1
+    if print_collected_keys "${out}" "${rc}" "${key_name}" "${resolved}"; then
+        echo "Append the lines above to the deploy folder's known_hosts on the host, restart the runner, then re-run --learn."
+        rm -f "${out}"
+        return 0
+    fi
     rm -f "${out}"
-    [ "${rc}" -eq 0 ]
+    return 1
 }
 
 # Print the actionable diagnostic for a bastion whose key is missing or changed.
@@ -193,6 +267,10 @@ learn_host() {
     case "${jump}" in none) jump="" ;; esac
     key_name="${alias:-${hostname}}"
 
+    # Resolved values feed ssh argv and a remote shell command: validate before use.
+    validate_host_value "resolved hostname" "${hostname}"
+    validate_port_value "resolved port" "${port}"
+
     if [ -z "${jump}" ]; then
         learn_direct "${hostname}" "${port}" "${key_name}"
         return $?
@@ -205,19 +283,10 @@ learn_host() {
             ;;
     esac
 
-    # Parse the jump specification first: inline ports are not resolved by `ssh -G`.
-    local jump_user="" jump_host jump_port="" rest
-    rest="${jump}"
-    case "${rest}" in *@*) jump_user="${rest%%@*}"; rest="${rest#*@}" ;; esac
-    case "${rest}" in *:*) jump_port="${rest##*:}"; rest="${rest%:*}" ;; esac
-    jump_host="${rest}"
-    case "${jump_port}" in
-        "") : ;;
-        *[!0-9]*)
-            echo "${SCRIPT_NAME}: cannot parse the jump specification '${jump}'; collect the keys manually" >&2
-            exit 2
-            ;;
-    esac
+    # Parse the jump specification first: inline ports are not resolved by `ssh -G`. The explicit
+    # proxy user wins over the bastion's default, which real `ssh -G` output always reports.
+    parse_jump_spec "${jump}"
+    local jump_user="${JUMP_USER}" jump_host="${JUMP_HOST}" jump_port="${JUMP_PORT}"
 
     # Resolve the bastion through its own Host block (or defaults).
     local jump_dump="" eff_host eff_port eff_user eff_dest err rc out
@@ -236,8 +305,11 @@ learn_host() {
     [ -n "${eff_host}" ] || eff_host="${jump_host}"
     eff_port="$(dump_field "${jump_dump}" port)"
     [ -n "${eff_port}" ] || eff_port="${jump_port:-22}"
-    eff_user="$(dump_field "${jump_dump}" user)"
-    [ -n "${eff_user}" ] || eff_user="${jump_user}"
+    eff_user="${jump_user}"
+    [ -n "${eff_user}" ] || eff_user="$(dump_field "${jump_dump}" user)"
+    validate_host_value "resolved bastion host" "${eff_host}"
+    validate_port_value "resolved bastion port" "${eff_port}"
+    [ -z "${eff_user}" ] || validate_host_value "resolved bastion user" "${eff_user}"
     eff_dest="${eff_host}"
     [ -z "${eff_user}" ] || eff_dest="${eff_user}@${eff_host}"
 
@@ -261,14 +333,18 @@ learn_host() {
 
     out="$(mktemp "${TMPDIR:-/tmp}/deploy-ssh-check.XXXXXX")"
     set +e
-    ssh -p "${eff_port}" "${eff_dest}" "ssh-keyscan -t ${KEYSCAN_TYPES} -p ${port} ${hostname}" \
+    ssh -o BatchMode=yes -o ConnectTimeout="${CONNECT_TIMEOUT}" -o StrictHostKeyChecking=yes \
+        -p "${eff_port}" "${eff_dest}" "ssh-keyscan -t ${KEYSCAN_TYPES} -p ${port} ${hostname}" \
         >"${out}" 2>/dev/null
     rc=$?
     set -e
-    print_collected_keys "${out}" "${rc}" "${key_name}" "${hostname}" || rc=1
-    [ "${rc}" -eq 0 ] || rc=1
+    if print_collected_keys "${out}" "${rc}" "${key_name}" "${hostname}"; then
+        echo "Append the lines above to the deploy folder's known_hosts on the host, restart the runner, then re-run --learn."
+        rm -f "${out}"
+        return 0
+    fi
     rm -f "${out}"
-    [ "${rc}" -eq 0 ]
+    return 1
 }
 
 # --- argument parsing ----------------------------------------------------------------------------

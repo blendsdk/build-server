@@ -129,6 +129,9 @@ run_check() {
     set -e
 }
 
+# The install instruction that must terminate every successful --learn run.
+LEARN_INSTRUCTION="Append the lines above to the deploy folder's known_hosts on the host, restart the runner, then re-run --learn."
+
 # --- ST-20: pattern hosts are listed as skipped and never tested -------------------------------
 new_case st-20
 write_config 'Host app-prod
@@ -207,6 +210,8 @@ grep -qF 'ssh-keyscan -t ed25519,rsa -p 22 app-prod' "${TRACE}" ||
     fail "ST-25: the keyscan must target the resolved name and port"
 grep -qF 'app-prod ssh-ed25519 AAAATESTKEY' "${OUT}" ||
     fail "ST-25: the collected key line is missing"
+[ "$(tail -n 1 "${OUT}")" = "${LEARN_INSTRUCTION}" ] ||
+    fail "ST-25: the output must end with the install instruction"
 echo "PASS: ST-25 --learn with no jump scans the target directly"
 
 # --- ST-26: an unpinned bastion prints the Host-block diagnostic and skips the host -------------
@@ -248,6 +253,10 @@ grep -F 'deploy@bastion.corp' "${TRACE}" | grep -qF 'ssh-keyscan -t ed25519,rsa 
 grep -q '^ssh-keyscan ' "${TRACE}" && fail "ST-27: the target keyscan must not run locally"
 grep -qF 'app-prod ssh-ed25519 AAAATESTKEY' "${OUT}" ||
     fail "ST-27: the collected key line is missing"
+[ "$(tail -n 1 "${OUT}")" = "${LEARN_INSTRUCTION}" ] ||
+    fail "ST-27: the output must end with the install instruction"
+grep -F 'deploy@bastion.corp' "${TRACE}" | grep -F 'ssh-keyscan' | grep -qF 'StrictHostKeyChecking=yes' ||
+    fail "ST-27: the keyscan hop must use strict host-key checking"
 echo "PASS: ST-27 --learn scans the target through the bastion"
 
 # --- ST-28: an ssh -G failure exits 2 and names the host ---------------------------------------
@@ -309,5 +318,40 @@ grep -qF 'deploy-ssh-check: 2 of 2 hosts passed' "${OUT}" ||
     fail "ST-39: only foo and baz#qux may be tested"
 grep -qE '^ssh -G (comment|#)' "${TRACE}" && fail "ST-39: comment tokens must never be resolved"
 echo "PASS: ST-39 inline comments stop tokenization while a '#' inside a token stays literal"
+
+# --- ST-46: a resolved HostName with shell metacharacters is rejected --------------------------
+new_case st-46
+write_config 'Host app-prod
+'
+# The single-quoted dump keeps the backticks literal, so the resolved hostname is `id` (a command
+# substitution if it ever reached a shell). The check must refuse it before any keyscan runs.
+# shellcheck disable=SC2016  # the backticks must stay literal in the resolved hostname under test
+SSH_G_DUMP='hostname `id`
+port 22'
+run_check "${H}" "${OUT}" --learn app-prod
+[ "${CODE}" -eq 2 ] || fail "ST-46: expected exit 2, got ${CODE}"
+grep -qF 'resolved hostname' "${OUT}" || fail "ST-46: the resolved-hostname label is missing"
+grep -qF 'is not supported' "${OUT}" || fail "ST-46: the unsupported-value message is missing"
+grep -q 'ssh-keyscan' "${TRACE}" && fail "ST-46: no keyscan may run for an unsupported resolved name"
+echo "PASS: ST-46 a resolved HostName with shell metacharacters is rejected"
+
+# --- ST-47: test mode fails when a jump's bastion is not strictly verified ---------------------
+new_case st-47
+write_config 'Host app-prod
+'
+SSH_G_DUMP='hostname app-prod
+port 22
+proxyjump deploy@bastion.corp:2222'
+SSH_G_DUMP_bastion_corp='hostname bastion.corp
+port 2222
+stricthostkeychecking ask'
+run_check "${H}" "${OUT}"
+[ "${CODE}" -eq 1 ] || fail "ST-47: expected exit 1, got ${CODE}"
+grep -qF "FAIL app-prod - bastion 'deploy@bastion.corp:2222' host-key checking is not strict (set StrictHostKeyChecking yes for it)" "${OUT}" ||
+    fail "ST-47: the non-strict bastion FAIL line is missing"
+grep -qF 'deploy-ssh-check: 0 of 1 hosts passed' "${OUT}" ||
+    fail "ST-47: the failing summary is missing"
+grep -q '^ssh-keyscan ' "${TRACE}" && fail "ST-47: no keyscan may run in test mode"
+echo "PASS: ST-47 a non-strict bastion FAILs the host with exit 1"
 
 echo "deploy-ssh-check spec tests: PASS"

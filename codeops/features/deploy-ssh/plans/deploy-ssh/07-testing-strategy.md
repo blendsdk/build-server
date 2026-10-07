@@ -75,9 +75,9 @@
 | ST-22 | Stub `ssh` exits 255 with stderr `Host key verification failed.` | Output contains `FAIL app-prod - Host key verification failed.`; exit code `1` | Req R7 / AR #20 |
 | ST-23 | No deploy config present | Exit code `2`; message names the missing path and the mount/restart hint | AR #20 |
 | ST-24 | `--learn` with no host arguments | Exit code `2`; usage message | AR #19 |
-| ST-25 | `--learn app-prod`; `ssh -G` reports no `proxyjump` and `port 22` | `ssh-keyscan -t ed25519,rsa -p 22 app-prod` runs; its lines are printed; exit code `0` | Req R8 |
+| ST-25 | `--learn app-prod`; `ssh -G` reports no `proxyjump` and `port 22` | `ssh-keyscan -t ed25519,rsa -p 22 app-prod` runs; its lines are printed followed by the install instruction; exit code `0` | Req R8, RV-302 |
 | ST-26 | `--learn app-prod`; `ssh -G` reports `proxyjump deploy@bastion.corp:2222`; the bastion connection fails with a host-key error | The diagnostic names the bastion `Host`-block requirement and prints `ssh-keyscan -t ed25519,rsa -p 2222 bastion.corp`; no target keyscan runs; exit code `1` | AR #8, PF-001 |
-| ST-27 | `--learn app-prod`; `ssh -G` reports the bastion; the bastion connection succeeds | `ssh -p 2222 deploy@bastion.corp "ssh-keyscan -t ed25519,rsa -p 22 app-prod"` runs; its lines are printed; exit code `0` | Req R8 |
+| ST-27 | `--learn app-prod`; `ssh -G` reports the bastion; the bastion connection succeeds | `ssh -p 2222 deploy@bastion.corp "ssh-keyscan -t ed25519,rsa -p 22 app-prod"` runs with strict verification; its lines are printed followed by the install instruction; exit code `0` | Req R8, RV-301, RV-302, SA-302 |
 | ST-28 | `ssh -G` fails for a host | Exit code `2`; the host is named | AR #20 |
 | ST-29 | `fleet.sh check-ssh alpha` with a stubbed docker | The trace contains `exec -u docker alpha deploy-ssh-check` (under the merged compose invocation); exit code `0` | Req R9 / AR #18 |
 | ST-30 | `fleet.sh check-ssh` with no organization | Exit non-zero; usage message | AR #18 |
@@ -86,6 +86,8 @@
 | ST-36 | `--learn app-prod` with `Host app-prod` + `Hostname 10.20.1.5` (no jump); keyscan stub records argv | Keyscan runs against the resolved `10.20.1.5`; printed entries are keyed to the resolved name; exit code `0` | PF-002 |
 | ST-37 | `--learn` with `HostName` and `HostKeyAlias` set | Printed first fields use the `HostKeyAlias` value; keyscan targets the resolved `hostname`; exit code `0` | PF-002 |
 | ST-39 | Config contains `Host foo # comment` and `Host baz#qux`; run with no arguments | Only `foo` and `baz#qux` are tested; `#` and `comment` are not tested | PF-019 |
+| ST-46 | A resolved `HostName` contains shell metacharacters (for example a backtick or `$`) | An `is not supported` configuration error; exit `2`; no keyscan runs | SA-301 |
+| ST-47 | Test mode with a `ProxyJump` whose bastion is not covered by `StrictHostKeyChecking yes` | `FAIL <host> - bastion '<hop>' host-key checking is not strict (...)`; exit `1` | SA-302 |
 | ST-40 | `fleet.sh check-ssh Alpha` where `Alpha` declares no `deploy_ssh` | Exit non-zero; `organization 'alpha' has no deploy_ssh configured`; no `compose exec` in the trace | AR #18, PF-008 |
 
 ### Packaging (03-04) — `test/dockerfile.spec.test.sh`, `test/bootstrap.spec.test.sh`
@@ -112,7 +114,7 @@
 | `test/orgs.spec.test.sh` | ST-1..ST-10, ST-38, ST-41 | Fleet configuration / rendering |
 | `test/fleet.spec.test.sh` | ST-11..ST-13, ST-29..ST-32, ST-40 | CLI behavior |
 | `test/entrypoint.spec.test.sh` | ST-14..ST-19, ST-43..ST-45 | Container staging |
-| `test/deploy-ssh-check.spec.test.sh` *(new)* | ST-20..ST-28, ST-36, ST-37, ST-39 | Check script |
+| `test/deploy-ssh-check.spec.test.sh` *(new)* | ST-20..ST-28, ST-36, ST-37, ST-39, ST-46, ST-47 | Check script |
 | `test/dockerfile.spec.test.sh` | ST-33, ST-35 | Packaging and hygiene |
 | `test/bootstrap.spec.test.sh` | ST-34 | Installer |
 
@@ -124,7 +126,7 @@
 | --------- | ----------- | -------- |
 | `test/fleet.impl.test.sh` | Auto-create on `restart`/`update`/`update-runners`/`upgrade-all`; byte-identical generation with `deploy_ssh`; a validation failure preserves the previous generated file; sentinel files survive `clean --yes` and `upgrade-all --yes` (PF-016); the creation notice is silent on repeat runs or when only `keys/` is missing (RV-004) | High |
 | `test/entrypoint.impl.test.sh` | Mode/ownership failures warn and continue; keys-only source without include; full re-copy when the source changes between boots; staging runs before the runner user starts (the `setpriv` stub records `deploy.d` existence); config-only source; a pre-existing `~/.ssh/config` is preserved (RV-101, RV-103) | High |
-| `test/deploy-ssh-check.impl.test.sh` *(new)* | `Host` line parsing edge cases (inline comments, blank lines, mixed case, duplicates, multiple tokens); `-`-prefixed token rejection; empty `ssh-keyscan` output → FAIL; bastion authentication failure → `FAIL`, continue, exit 1; chained-jump unsupported message; multiple hosts with mixed results | Medium |
+| `test/deploy-ssh-check.impl.test.sh` *(new)* | `Host` line parsing edge cases (inline comments, blank lines, mixed case, duplicates, multiple tokens); `-`-prefixed token rejection; empty `ssh-keyscan` output → FAIL; bastion authentication failure → `FAIL`, continue, exit 1; chained-jump unsupported message; multiple hosts with mixed results; changed-key bastion diagnostic; bastion user fidelity; the strictness gate; option/no-write assertions (RV-301, RV-303, SA-302, SA-304) | Medium |
 
 ### Integration Tests
 
