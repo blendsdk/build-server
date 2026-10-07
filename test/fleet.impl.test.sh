@@ -2,8 +2,9 @@
 # Implementation tests for fleet.sh.
 #
 # Covers internals the specification tests do not pin: byte-identical idempotence, the atomic
-# temp file, preservation of the previous output when generation fails, and whitespace/comment
-# handling in orgs.conf.
+# temp file, preservation of the previous output when generation fails, whitespace/comment
+# handling in orgs.conf, and the deploy_ssh folder lifecycle (auto-creation on the remaining
+# container-starting commands, idempotent rendering, and preservation of operator material).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,6 +26,41 @@ new_sandbox() {
 run_generate() {
     local dir="$1"
     (cd "${dir}" && ACCESS_TOKEN=dummy bash fleet.sh generate)
+}
+
+# Add stub docker and curl binaries on PATH for a sandbox. Every invocation is appended to the
+# sandbox trace; the stubs default to success, so lifecycle commands run without a Docker host.
+stub_tools() {
+    local dir="$1"
+    mkdir -p "${dir}/bin" "${dir}/home"
+    # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
+    printf '#!/bin/bash\nprintf "docker %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"container inspect"*) printf "%%s\\n" "${LEGACY_PROJECT:-}"; exit "${INSPECT_EXIT:-0}" ;;\n    *"image inspect"*) exit "${IMAGE_INSPECT_EXIT:-0}" ;;\nesac\nexit "${DOCKER_EXIT:-0}"\n' \
+        > "${dir}/bin/docker"
+    # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
+    printf '#!/bin/bash\nprintf "curl %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"-X DELETE"*) code="${DELETE_HTTP_CODE:-204}" ;;\n    *) code="${CURL_HTTP_CODE:-200}" ;;\nesac\ncase "$*" in\n    *"-o /dev/null"*) printf "%%s" "${code}" ;;\n    *) printf "%%s\\n%%s" "${CURL_BODY:-}" "${code}" ;;\nesac\nexit "${CURL_EXIT:-0}"\n' \
+        > "${dir}/bin/curl"
+    chmod +x "${dir}/bin/docker" "${dir}/bin/curl"
+}
+
+# Run a fleet command in a sandbox with the stub tools, an isolated HOME (so no real SSH material
+# is ever staged), and a deterministic token and trace file.
+run_fleet() {
+    local dir="$1"
+    shift
+    (cd "${dir}" && HOME="${dir}/home" ACCESS_TOKEN=dummy TRACE="${dir}/trace" \
+        PATH="${dir}/bin:${PATH}" CURL_BODY="${CURL_BODY:-}" CURL_EXIT="${CURL_EXIT:-0}" \
+        CURL_HTTP_CODE="${CURL_HTTP_CODE:-200}" DOCKER_EXIT="${DOCKER_EXIT:-0}" \
+        IMAGE_INSPECT_EXIT="${IMAGE_INSPECT_EXIT:-0}" bash fleet.sh "$@")
+}
+
+# Assert that a declared deploy folder was auto-created with restricted modes.
+assert_deploy_created() {
+    local dir="$1"
+    [ -d "${dir}/deploy-ssh/alpha" ] || fail "deploy-ssh/alpha was not created"
+    [ -d "${dir}/deploy-ssh/alpha/keys" ] || fail "deploy-ssh/alpha/keys was not created"
+    [ "$(stat -c '%a' "${dir}/deploy-ssh/alpha")" = "700" ] || fail "deploy-ssh/alpha must be 0700"
+    [ "$(stat -c '%a' "${dir}/deploy-ssh/alpha/keys")" = "700" ] ||
+        fail "deploy-ssh/alpha/keys must be 0700"
 }
 
 # --- Idempotence: same input renders byte-identical output --------------------------------
@@ -168,5 +204,124 @@ rm "${S}/.runner-version"
     fail "build without a pinned version should succeed"
 grep -q -- '--build-arg RUNNER_VERSION=1.2.3' "${S}/trace" || fail "Dockerfile ARG fallback missing"
 echo "PASS: version precedence is state file then Dockerfile"
+
+# --- deploy_ssh: restart creates a missing declared folder ----------------------------------
+# The remaining container-starting commands must create a missing declared folder (with keys/) at
+# 0700 before starting runners, like up/start. `restart` also requires the runner image to exist.
+S="${T}/autocreate-restart"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" restart >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "restart should create the deploy folder and continue"
+}
+assert_deploy_created "${S}"
+echo "PASS: restart creates missing deploy-ssh folders with 0700"
+
+# --- deploy_ssh: update <org> creates a missing declared folder -----------------------------
+S="${T}/autocreate-update"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" update Alpha >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "update should create the deploy folder and continue"
+}
+assert_deploy_created "${S}"
+echo "PASS: update <org> creates missing deploy-ssh folders with 0700"
+
+# --- deploy_ssh: update-runners creates a missing declared folder ---------------------------
+S="${T}/autocreate-update-runners"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" update-runners >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "update-runners should create the deploy folder and continue"
+}
+assert_deploy_created "${S}"
+echo "PASS: update-runners creates missing deploy-ssh folders with 0700"
+
+# --- deploy_ssh: upgrade-all creates a missing declared folder -------------------------------
+S="${T}/autocreate-upgrade-all"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" upgrade-all --yes >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "upgrade-all should create the deploy folder and continue"
+}
+assert_deploy_created "${S}"
+echo "PASS: upgrade-all creates missing deploy-ssh folders with 0700"
+
+# --- deploy_ssh: rendering stays byte-identical across runs ----------------------------------
+S="${T}/deploy-idem"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\nBeta build_temp=1\n' > "${S}/orgs.conf"
+run_generate "${S}" >/dev/null
+FIRST="$(sha256sum "${S}/docker-compose.generated.yml" | cut -d' ' -f1)"
+run_generate "${S}" >/dev/null
+SECOND="$(sha256sum "${S}/docker-compose.generated.yml" | cut -d' ' -f1)"
+[ "${FIRST}" = "${SECOND}" ] || fail "deploy_ssh rendering is not byte-identical"
+echo "PASS: deploy_ssh rendering is idempotent"
+
+# --- deploy_ssh: an invalid value preserves the previous output -----------------------------
+# Validation fails before rendering, so the previous generated file must stay byte-identical and
+# no temp file may be left behind.
+S="${T}/deploy-invalid"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+run_generate "${S}" >/dev/null
+cp "${S}/docker-compose.generated.yml" "${S}/before.yml"
+printf 'Alpha deploy_ssh=../escape\n' > "${S}/orgs.conf"
+if run_generate "${S}" >/dev/null 2>&1; then
+    fail "an escaping deploy_ssh value should fail generation"
+fi
+cmp -s "${S}/before.yml" "${S}/docker-compose.generated.yml" ||
+    fail "previous output was modified by an invalid deploy_ssh value"
+[ -z "$(find "${S}" -maxdepth 1 -name '*.tmp' -print -quit)" ] ||
+    fail "temp file left behind after an invalid deploy_ssh value"
+echo "PASS: an invalid deploy_ssh value preserves the previous output and leaves no temp file"
+
+# --- deploy_ssh: clean never touches operator material ---------------------------------------
+S="${T}/deploy-preserve-clean"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha/keys"
+printf 'secret\n' > "${S}/deploy-ssh/alpha/keep.txt"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" clean --yes >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "clean --yes should succeed"
+}
+[ -d "${S}/deploy-ssh/alpha" ] || fail "clean must not delete deploy-ssh/alpha"
+[ -d "${S}/deploy-ssh/alpha/keys" ] || fail "clean must not delete deploy-ssh/alpha/keys"
+[ "$(cat "${S}/deploy-ssh/alpha/keep.txt")" = "secret" ] ||
+    fail "clean must not delete files inside deploy-ssh/alpha"
+echo "PASS: clean --yes preserves deploy-ssh folders and contents"
+
+# --- deploy_ssh: upgrade-all never touches operator material ---------------------------------
+S="${T}/deploy-preserve-upgrade-all"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha/keys"
+printf 'secret\n' > "${S}/deploy-ssh/alpha/keep.txt"
+stub_tools "${S}"
+: > "${S}/trace"
+CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" upgrade-all --yes >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "upgrade-all --yes should succeed"
+}
+[ -d "${S}/deploy-ssh/alpha" ] || fail "upgrade-all must not delete deploy-ssh/alpha"
+[ -d "${S}/deploy-ssh/alpha/keys" ] || fail "upgrade-all must not delete deploy-ssh/alpha/keys"
+[ "$(cat "${S}/deploy-ssh/alpha/keep.txt")" = "secret" ] ||
+    fail "upgrade-all must not delete files inside deploy-ssh/alpha"
+echo "PASS: upgrade-all --yes preserves deploy-ssh folders and contents"
 
 echo "fleet impl tests: PASS"

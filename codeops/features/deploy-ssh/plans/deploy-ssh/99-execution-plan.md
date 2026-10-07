@@ -101,9 +101,9 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`07-testing-strategy.md`](07-testing-strategy.md) §Implementation Tests · PF-005
 **Objective**: Author ST-35 before the ignore entries, cover internals, and exclude the folder from git and build contexts.
 
-- [ ] 1.3.1 [spec-author] Author the ignore-file spec case ST-35 and record its red phase — `test/dockerfile.spec.test.sh`
-- [ ] 1.3.2 Extend `test/fleet.impl.test.sh` (auto-create on `restart`/`update`/`update-runners`/`upgrade-all`, idempotent rendering, validation failure preserves the previous output, sentinel files survive `clean --yes`/`upgrade-all --yes`) — `test/fleet.impl.test.sh`
-- [ ] 1.3.3 Add `deploy-ssh/` to `.gitignore` and `deploy-ssh` to `.dockerignore`
+- [x] 1.3.1 [spec-author] Author the ignore-file spec case ST-35 and record its red phase — `test/dockerfile.spec.test.sh` ✅ (completed: 2026-10-07 15:27)
+- [x] 1.3.2 Extend `test/fleet.impl.test.sh` (auto-create on `restart`/`update`/`update-runners`/`upgrade-all`, idempotent rendering, validation failure preserves the previous output, sentinel files survive `clean --yes`/`upgrade-all --yes`) — `test/fleet.impl.test.sh` ✅ (completed: 2026-10-07 15:27)
+- [!] 1.3.3 Add `deploy-ssh/` to `.gitignore` and `deploy-ssh` to `.dockerignore` — Blocked: hidden dotfiles need the operator's direct per-file confirmation before editing
 - [ ] 1.3.4 Full verification — `bash test/verify.sh`
 
 **Deliverables**:

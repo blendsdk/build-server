@@ -1,8 +1,9 @@
 #!/bin/bash
-# Static specification checks for the runner Dockerfile.
+# Static specification checks for the runner Dockerfile and packaging hygiene files.
 #
 # The image must install only packages that exist on Ubuntu 24.04 (the noble time64 renames), and
-# it must contain the inner Docker engine used by each runner's private daemon.
+# it must contain the inner Docker engine used by each runner's private daemon. The ignore files
+# must keep deploy-SSH key material out of git and out of Docker build contexts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,5 +49,19 @@ grep -Eq 'NPM_CONFIG_ALLOW_SCRIPTS=pnpm|allow-scripts=pnpm' "${DOCKERFILE}" ||
 
 # The work_queue lock helper was removed from the fleet.
 grep -Eq "(^|[[:space:]])work_queue([[:space:]]|$)" "${DOCKERFILE}" && fail "work_queue must not be shipped"
+
+# deploy-SSH key material must never be committed or sent as build context. Every deploy folder
+# lives under deploy-ssh/ (enforced separately), so these fixed exclusions cover every key path.
+GITIGNORE="${ROOT}/.gitignore"
+DOCKERIGNORE="${ROOT}/.dockerignore"
+
+[ -f "${GITIGNORE}" ] || fail ".gitignore is missing"
+[ -f "${DOCKERIGNORE}" ] || fail ".dockerignore is missing"
+
+grep -Eq '^[[:space:]]*deploy-ssh/[[:space:]]*$' "${GITIGNORE}" ||
+    fail ".gitignore must exclude the deploy-ssh/ directory so keys are never committed"
+
+grep -Eq '^[[:space:]]*deploy-ssh[[:space:]]*$' "${DOCKERIGNORE}" ||
+    fail ".dockerignore must exclude deploy-ssh so keys are never sent as build context"
 
 echo "Dockerfile spec tests: PASS"
