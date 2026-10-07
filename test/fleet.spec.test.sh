@@ -482,4 +482,69 @@ UP_LINE="$(grep -n 'up -d' "${S}/trace" | tail -1 | cut -d: -f1)"
 grep -q -- '-X DELETE' "${S}/trace" && fail "upgrade-all must not remove runner registrations"
 echo "PASS: upgrade-all fetches, tears down, cleans, rebuilds, and restarts"
 
+# --- up/start create declared deploy-ssh folders (0700) and print a notice -------------------
+# ST-11: a missing deploy folder must be created before the runner containers start, with a
+# notice, and the lifecycle command must still run. Removing the folder again must make the next
+# container-starting command recreate it.
+S="${T}/deploy-ssh-create"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up should create the missing deploy-ssh folder and continue"
+}
+[ -d "${S}/deploy-ssh/alpha" ] || fail "up must create deploy-ssh/alpha"
+[ -d "${S}/deploy-ssh/alpha/keys" ] || fail "up must create deploy-ssh/alpha/keys"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha")" = "700" ] || fail "deploy-ssh/alpha must be 0700"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha/keys")" = "700" ] ||
+    fail "deploy-ssh/alpha/keys must be 0700"
+grep -q 'created deploy-ssh/alpha' "${S}/out" || fail "up must announce the created deploy folder"
+grep -q 'up -d' "${S}/trace" || fail "up must still start the fleet after creating the folder"
+
+rm -rf "${S}/deploy-ssh/alpha"
+: > "${S}/trace"
+run_fleet "${S}" start >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "start should recreate the missing deploy-ssh folder and continue"
+}
+[ -d "${S}/deploy-ssh/alpha" ] || fail "start must recreate deploy-ssh/alpha"
+[ -d "${S}/deploy-ssh/alpha/keys" ] || fail "start must recreate deploy-ssh/alpha/keys"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha")" = "700" ] ||
+    fail "recreated deploy-ssh/alpha must be 0700"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha/keys")" = "700" ] ||
+    fail "recreated deploy-ssh/alpha/keys must be 0700"
+grep -q 'created deploy-ssh/alpha' "${S}/out" ||
+    fail "start must announce the recreated deploy folder"
+grep -qF -- '-f docker-compose.yml -f docker-compose.generated.yml start' "${S}/trace" ||
+    fail "start must still start the fleet after creating the folder"
+echo "PASS: up and start create deploy-ssh folders with 0700 and a notice"
+
+# --- generate and status never create deploy-ssh folders -------------------------------------
+# ST-12: side-effect-free commands must not create declared deploy folders.
+S="${T}/deploy-ssh-readonly"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+set +e
+run_fleet "${S}" generate >"${S}/out" 2>&1
+run_fleet "${S}" status >"${S}/out" 2>&1
+set -e
+[ ! -e "${S}/deploy-ssh/alpha" ] || fail "generate/status must not create deploy-ssh/alpha"
+echo "PASS: generate and status never create deploy-ssh folders"
+
+# --- down never deletes deploy-ssh folders or their contents ---------------------------------
+# ST-13: teardown must leave declared deploy folders untouched.
+S="${T}/deploy-ssh-preserve"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha"
+printf 'secret\n' > "${S}/deploy-ssh/alpha/keep.txt"
+set +e
+CURL_BODY='{"total_count":0,"runners":[]}' CURL_HTTP_CODE=200 run_fleet "${S}" down >"${S}/out" 2>&1
+set -e
+[ -d "${S}/deploy-ssh/alpha" ] || fail "down must not delete deploy-ssh/alpha"
+[ "$(cat "${S}/deploy-ssh/alpha/keep.txt")" = "secret" ] ||
+    fail "down must not delete files inside deploy-ssh/alpha"
+echo "PASS: down preserves deploy-ssh folders and their contents"
+
 echo "fleet spec tests: PASS"

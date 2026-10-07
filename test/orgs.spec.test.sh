@@ -204,4 +204,101 @@ printf '...\n' > "${S}/orgs.conf"
 expect_fail "${S}" "empty slug" "orgs.conf:1: organization '...' has an empty slug"
 echo "PASS: URL shapes and slug validation"
 
+# --- deploy_ssh renders one read-only mount on the declaring org (ST-1) ---------------------
+S="${T}/sshmount"; new_sandbox "${S}"
+mkdir -p "${S}/deploy-ssh/acmetools"
+printf 'AcmeTools deploy_ssh=deploy-ssh/acmetools\n' > "${S}/orgs.conf"
+MODEL="$(render_json "${S}")"
+[ "$(jq -r '.services.acmetools.volumes | length' <<<"${MODEL}")" -eq 1 ] ||
+    fail "ST-1: acmetools must have exactly one volume"
+[ "$(jq -r '.services.acmetools.volumes[0].type' <<<"${MODEL}")" = "bind" ] ||
+    fail "ST-1: the deploy mount must be a bind volume"
+[ "$(jq -r '.services.acmetools.volumes[0].target' <<<"${MODEL}")" = "/run/deploy-ssh" ] ||
+    fail "ST-1: the deploy mount target must be /run/deploy-ssh"
+[ "$(jq -r '.services.acmetools.volumes[0].read_only' <<<"${MODEL}")" = "true" ] ||
+    fail "ST-1: the deploy mount must be read-only"
+jq -e '.services.acmetools.volumes[0].source | endswith("/deploy-ssh/acmetools")' <<<"${MODEL}" >/dev/null ||
+    fail "ST-1: the deploy mount source must end in /deploy-ssh/acmetools"
+echo "PASS: ST-1 deploy_ssh renders a read-only /run/deploy-ssh mount"
+
+# --- the deploy mount is scoped to its org (ST-2) -------------------------------------------
+S="${T}/sshscoped"; new_sandbox "${S}"
+mkdir -p "${S}/deploy-ssh/mounted"
+printf 'PlainOrg\nWithMount deploy_ssh=deploy-ssh/mounted\n' > "${S}/orgs.conf"
+MODEL="$(render_json "${S}")"
+[ "$(jq -r '[.services.plainorg.volumes[]?.target] | index("/run/deploy-ssh")' <<<"${MODEL}")" = "null" ] ||
+    fail "ST-2: an org without deploy_ssh must not mount /run/deploy-ssh"
+echo "PASS: ST-2 deploy_ssh is scoped to the declaring org"
+
+# --- build_temp and deploy_ssh volumes render together (ST-3) --------------------------------
+S="${T}/sshbuildtemp"; new_sandbox "${S}"
+mkdir -p "${S}/deploy-ssh/globex"
+printf 'Globex build_temp=1 deploy_ssh=deploy-ssh/globex\n' > "${S}/orgs.conf"
+MODEL="$(render_json "${S}")"
+jq -e '[.services.globex.volumes[]?.target] | (index("/run/deploy-ssh") != null) and (index("/build-temp") != null)' \
+    <<<"${MODEL}" >/dev/null ||
+    fail "ST-3: globex must mount both /run/deploy-ssh and /build-temp"
+echo "PASS: ST-3 build_temp and deploy_ssh volumes render together"
+
+# --- two orgs may share one deploy_ssh folder (ST-4) -----------------------------------------
+S="${T}/sshshared"; new_sandbox "${S}"
+mkdir -p "${S}/deploy-ssh/shared"
+printf 'One deploy_ssh=deploy-ssh/shared\nTwo deploy_ssh=deploy-ssh/shared\n' > "${S}/orgs.conf"
+MODEL="$(render_json "${S}")"
+[ "$(jq -r '.services.one.volumes[0].target' <<<"${MODEL}")" = "/run/deploy-ssh" ] ||
+    fail "ST-4: one must mount /run/deploy-ssh"
+[ "$(jq -r '.services.two.volumes[0].target' <<<"${MODEL}")" = "/run/deploy-ssh" ] ||
+    fail "ST-4: two must mount /run/deploy-ssh"
+ONE_SRC="$(jq -r '.services.one.volumes[0].source' <<<"${MODEL}")"
+TWO_SRC="$(jq -r '.services.two.volumes[0].source' <<<"${MODEL}")"
+[ "${ONE_SRC}" = "${TWO_SRC}" ] || fail "ST-4: both orgs must share the same deploy_ssh source"
+jq -e '.services.one.volumes[0].source | endswith("/deploy-ssh/shared")' <<<"${MODEL}" >/dev/null ||
+    fail "ST-4: the shared source must end in /deploy-ssh/shared"
+echo "PASS: ST-4 two orgs share one deploy_ssh folder"
+
+# --- deploy_ssh validation rejects unsafe paths, one input per rule (ST-5..ST-10, ST-38, ST-41)
+S="${T}/sshempty"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-5 empty" "orgs.conf:1: deploy_ssh path must not be empty"
+
+S="${T}/sshabsolute"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=/etc/deploy\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-6 absolute" "orgs.conf:1: deploy_ssh path must be relative"
+
+S="${T}/sshtraversal"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=../escape\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-7 traversal" "orgs.conf:1: deploy_ssh path must not contain '..'"
+
+S="${T}/sshsymlink"; new_sandbox "${S}"
+mkdir -p "${T}/deploy-outside"
+ln -sfn "${T}/deploy-outside" "${S}/escape"
+printf 'BadOrg deploy_ssh=escape\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-8 symlink escape" "orgs.conf:1: deploy_ssh 'escape' resolves outside the repository"
+
+S="${T}/sshroot"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=.\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-9 repository root" "orgs.conf:1: deploy_ssh path must not be the repository root"
+
+S="${T}/sshfile"; new_sandbox "${S}"
+printf 'not a directory\n' > "${S}/x"
+printf 'BadOrg deploy_ssh=x\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-10 not a directory" "orgs.conf:1: deploy_ssh 'x' is not a directory"
+
+S="${T}/sshoutside"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=ops/keys\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-38 outside deploy-ssh" "orgs.conf:1: deploy_ssh path must be inside 'deploy-ssh/'"
+
+S="${T}/sshbare"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=deploy-ssh\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-38 bare deploy-ssh" "orgs.conf:1: deploy_ssh path must be inside 'deploy-ssh/'"
+
+S="${T}/sshcolon"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=deploy-ssh/acme:prod\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-41 colon" "orgs.conf:1: deploy_ssh path must not contain '*', '?', '[', ':', or '\$'"
+
+S="${T}/sshglob"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=deploy-ssh/a*b\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-41 glob" "orgs.conf:1: deploy_ssh path must not contain '*', '?', '[', ':', or '\$'"
+echo "PASS: deploy_ssh validation rejects empty, absolute, traversal, escape, root, non-directory, outside, and metacharacter paths"
+
 echo "orgs spec tests: PASS"
