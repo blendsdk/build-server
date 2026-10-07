@@ -34,6 +34,11 @@ organizations keep the default `runner-image`.
 - A self-contained Dockerfile is possible, but it must provide the same contract: the root
   `/entrypoint.sh` (start `dockerd`, then run `/start.sh` as the `docker` user), an
   `/home/docker/actions-runner`, and `start.sh` in place.
+- To support `deploy_ssh=` and `check-ssh`, the image must also run the entrypoint deploy SSH
+  staging (copy `/run/deploy-ssh` into the runner user's `~/.ssh/deploy.d/` and prepend
+  `Include ~/.ssh/deploy.d/config` to `~/.ssh/config`) and ship `deploy-ssh-check` as
+  `/usr/local/bin/deploy-ssh-check`. Inheriting `FROM runner-image` provides both — see
+  [Deploy over SSH](/guide/deploy-ssh).
 - `update-runners` builds the default image first, then every custom context with
   `--build-arg RUNNER_VERSION=<version>`. Consume that argument if you replace the base:
 

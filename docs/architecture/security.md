@@ -25,6 +25,7 @@ The runner image bakes host credentials so private dependencies work out of the 
 | `~/.ssh/id_rsa` | Private git over SSH inside jobs |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml` | Private package registries |
 | `config.json` | Private Docker registry authentication |
+| `deploy-ssh/<org>/` | Deploy SSH material (`config`, `known_hosts`, `keys/`) mounted read-only into that organization's runner — see [Deploy over SSH](/guide/deploy-ssh) |
 | `.env` | `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET`, and the registry credentials injected into runners |
 
 The registry user and password from `.env` are also passed to every runner service (as
@@ -35,6 +36,9 @@ Consequences:
 
 - Any job on a runner can read these files and environment variables. Do not mix tenants (clients)
   in one fleet unless they trust each other.
+- Any job on a runner can read the deploy SSH keys of its organization, from the staged
+  `~/.ssh/deploy.d/` copy — the same model as the baked `~/.ssh/id_rsa`. A folder shared by several
+  organizations is readable by every job of each of them.
 - Use least-privilege tokens: the `ACCESS_TOKEN` needs runner management for the organizations in
   `orgs.conf`, nothing more.
 - Rotate credentials if an image or host is ever exposed, and keep `.env`/credential files

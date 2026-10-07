@@ -49,6 +49,7 @@ export default defineConfig({
             { text: 'Admin CLI', link: '/guide/cli' },
             { text: 'Custom images', link: '/guide/custom-images' },
             { text: 'Publishing images', link: '/guide/publishing' },
+            { text: 'Deploy SSH', link: '/guide/deploy-ssh' },
             { text: 'Runner versions', link: '/guide/runner-version' }
           ]
         }

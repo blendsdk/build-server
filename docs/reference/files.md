@@ -8,7 +8,7 @@
 | Path | Role |
 | --- | --- |
 | `bootstrap.sh` | Fresh-host installer (also the update entry point) |
-| `orgs.conf` | Organization registry (source of truth) |
+| `orgs.conf` | Organization registry (source of truth); optional `deploy_ssh=` per organization |
 | `fleet.sh` | Admin CLI |
 | `docker-compose.yml` | Static base: the private registry |
 | `docker-compose.generated.yml` | Generated runner services (gitignored) |
@@ -17,11 +17,13 @@
 | `.build-server-manifest` | Files installed by `bootstrap.sh`, used to clean up renames |
 | `.fleet-build/` | Temporary build staging (gitignored) |
 | `Dockerfile` | Runner image |
-| `entrypoint.sh` | Inner daemon startup and runner supervision |
+| `entrypoint.sh` | Inner daemon startup and runner supervision; stages the deploy SSH folder |
 | `start.sh` | Runner registration and lifecycle |
+| `deploy-ssh-check.sh` | Deploy SSH connectivity check; installed as `/usr/local/bin/deploy-ssh-check` in the image and into the install directory |
 | `.env` | Host secrets: `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET` |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json` | Host credentials baked into the image |
 | `ssh/` | Staged by `fleet.sh build` from `~/.ssh` |
+| `deploy-ssh/` | Host folder with deploy SSH material (`config`, `known_hosts`, `keys/`) mounted read-only into declaring runners (gitignored) — see [Deploy over SSH](/guide/deploy-ssh) |
 | `examples/` | Offline playground with stub `docker`/`curl` (development only) |
 | `test/` | Specification and implementation tests, `smoke-workflow.yml`, `verify.sh` (development only) |
 | `docs/` | This VitePress site (development only) |

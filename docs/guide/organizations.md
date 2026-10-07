@@ -3,12 +3,13 @@
 `orgs.conf` is the single source of truth for the fleet. Each line declares one organization:
 
 ```
-# <name> [url=...] [context=...] [build_temp=1]
+# <name> [url=...] [context=...] [build_temp=1] [deploy_ssh=<path>]
 
 AcmeTools
 Globex build_temp=1
 Initech context=examples/runner-custom
 Contoso url=https://ghe.example.com/Contoso
+# Contoso deploy_ssh=deploy-ssh/contoso
 ```
 
 | Field | Rules |
@@ -17,6 +18,7 @@ Contoso url=https://ghe.example.com/Contoso
 | `url=` | Optional GitHub or GitHub Enterprise base URL, `https://` only, default `https://github.com/<name>` |
 | `context=` | Optional folder inside the repository containing a `Dockerfile` for a custom image |
 | `build_temp=1` | Optional; mounts the host `/tmp` at `/build-temp` for this runner |
+| `deploy_ssh=` | Optional folder holding deploy SSH material (`config`, `known_hosts`, `keys/`), relative to the repository and inside `deploy-ssh/` (for example `deploy-ssh/acmetools`); created with `keys/` when missing — see [Deploy over SSH](/guide/deploy-ssh) |
 
 Blank lines and `#` comments are ignored. Unknown keys, malformed lines, duplicate names, duplicate
 or empty slugs, and an empty file all fail `generate` with the offending line.

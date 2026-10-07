@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 16:24
-> **Progress**: 34/39 tasks (87%)
+> **Last Updated**: 2026-10-07 16:27
+> **Progress**: 39/39 tasks (100%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -267,15 +267,15 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-04-packaging-and-docs.md`](03-04-packaging-and-docs.md) §Documentation deliverables · AR #26
 **Objective**: Publish the operator documentation and validate the release.
 
-- [ ] 4.3.1 Write the guide page (including the manual live-fleet checklist — PF-014) and add the sidebar entry — `docs/guide/deploy-ssh.md`, `docs/.vitepress/config.mts`
-- [ ] 4.3.2 Update the option and command references — `docs/guide/organizations.md`, `docs/guide/cli.md`, `docs/reference/files.md`
-- [ ] 4.3.3 Update security, upgrade, troubleshooting, and the stale reference pages — `docs/architecture/security.md`, `docs/operations/upgrades.md`, `docs/operations/troubleshooting.md`, `docs/reference/testing.md`, `docs/reference/faq.md`, `docs/guide/custom-images.md`
-- [ ] 4.3.4 Build the documentation site — `npm ci && npm run docs:build`
-- [ ] 4.3.5 Full verification — `bash test/verify.sh`
+- [x] 4.3.1 Write the guide page (including the manual live-fleet checklist — PF-014) and add the sidebar entry — `docs/guide/deploy-ssh.md`, `docs/.vitepress/config.mts` ✅ (completed: 2026-10-07 16:27)
+- [x] 4.3.2 Update the option and command references — `docs/guide/organizations.md`, `docs/guide/cli.md`, `docs/reference/files.md` ✅ (completed: 2026-10-07 16:27)
+- [x] 4.3.3 Update security, upgrade, troubleshooting, and the stale reference pages — `docs/architecture/security.md`, `docs/operations/upgrades.md`, `docs/operations/troubleshooting.md`, `docs/reference/testing.md`, `docs/reference/faq.md`, `docs/guide/custom-images.md` ✅ (completed: 2026-10-07 16:27)
+- [x] 4.3.4 Build the documentation site — `npm ci && npm run docs:build` ✅ (completed: 2026-10-07 16:27)
+- [x] 4.3.5 Full verification — `bash test/verify.sh` ✅ (completed: 2026-10-07 16:27)
 
 **Deliverables**:
-- [ ] Documentation covers setup, pinning, the check/learn flow, rotation, and troubleshooting
-- [ ] Docs build passes; all verification passing
+- [x] Documentation covers setup, pinning, the check/learn flow, rotation, and troubleshooting
+- [x] Docs build passes; all verification passing
 
 **Verify**: `bash test/verify.sh && npm ci && npm run docs:build`
 

@@ -16,6 +16,7 @@
 | `./fleet.sh clean [--yes]` | Removes this installation's unused images, containers, networks, and volumes, plus the host build cache |
 | `./fleet.sh upgrade-all [--yes]` | Fetches the latest Actions runner, stops the fleet, cleans unused resources, rebuilds every image, and restarts |
 | `./fleet.sh status` | Prints organizations, services, images, container state, and the pinned version |
+| `./fleet.sh check-ssh <org>` | Runs the deploy SSH connectivity check in that organization's runner |
 
 ## How the files fit together
 
@@ -61,6 +62,9 @@ the images and the build cache, because it only recreates containers.
 
 ## Operational notes
 
+- Commands that start container services (`up`, `restart`, `start`, `update`, `update-runners`,
+  `upgrade-all`) create a missing folder declared with `deploy_ssh=`; `generate` and `status` never
+  create one. See [Deploy over SSH](/guide/deploy-ssh).
 - `update <org>` and `update-runners` recreate containers and kill any job running on the affected
   runners. Run them between jobs.
 - `down` removes the runner registrations for the configured organizations through the GitHub API,

@@ -45,10 +45,16 @@ one command:
 
 It fetches the latest Actions runner release, stops the fleet, removes this installation's unused
 images and the host build cache, rebuilds the default and every custom image with the fetched
-version, and starts the fleet again. `orgs.conf`, `.env`, credentials, SSH material, and the
-registry data are never touched. The version is written to `.runner-version` only after every
-build succeeds, and it is fetched before the teardown, so an API failure leaves the running fleet
-unchanged.
+version, and starts the fleet again. `orgs.conf`, `.env`, credentials, SSH material, `deploy-ssh/`
+folders, and the registry data are never touched. The version is written to `.runner-version` only
+after every build succeeds, and it is fetched before the teardown, so an API failure leaves the
+running fleet unchanged.
+
+> **Deploy SSH needs a rebuilt image.** The `deploy_ssh=` option and `deploy-ssh-check` are provided
+> by the image and its `entrypoint.sh`. An image built before this feature ignores the deploy mount,
+> so the option has no effect until the image is rebuilt with `./fleet.sh build` or
+> `./fleet.sh upgrade-all`. Existing configurations without `deploy_ssh` are unaffected. See
+> [Deploy over SSH](/guide/deploy-ssh).
 
 The command asks for confirmation before the destructive part; use `--yes` in scripts. During the
 upgrade, running jobs are killed. Use `./fleet.sh clean --yes` to reclaim disk without rebuilding
@@ -83,7 +89,7 @@ their Compose project label — so the first start after an upgrade needs no man
 
 The only durable state on the host is:
 
-- `.env`, credential files, and `ssh/` — back these up securely;
+- `.env`, credential files, `ssh/`, and `deploy-ssh/` — back these up securely;
 - `registry/data` — the private image registry (optional; rebuildable);
 - `.runner-version`, `.build-server-version`, `.build-server-manifest` — trivial to recreate.
 

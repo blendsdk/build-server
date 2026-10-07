@@ -21,14 +21,16 @@ CI runs the same command on GitHub-hosted runners.
 
 | File | Covers |
 | --- | --- |
-| `test/orgs.spec.test.sh` | Configuration parsing, validation, and Compose generation |
+| `test/orgs.spec.test.sh` | Configuration parsing, validation, and Compose generation, including `deploy_ssh` mount rendering |
 | `test/compose.spec.test.sh` | The generated Compose model (privileges, sockets, secrets, mapping) |
 | `test/start.spec.test.sh` | Runner registration, URLs, email domain, shutdown ordering |
-| `test/dockerfile.spec.test.sh` | Image package availability and required contents |
-| `test/fleet.spec.test.sh` | CLI build/update/lifecycle behavior with stubbed externals |
-| `test/fleet.impl.test.sh` | Internal behavior: atomic writes, staging modes, version precedence |
-| `test/bootstrap.spec.test.sh` | Fresh-host installer with stubbed commands |
-| `test/entrypoint.spec.test.sh` / `entrypoint.impl.test.sh` | Inner daemon startup and supervision |
+| `test/dockerfile.spec.test.sh` | Image package availability and required contents, including `/usr/local/bin/deploy-ssh-check` |
+| `test/fleet.spec.test.sh` | CLI build/update/lifecycle behavior with stubbed externals, including `check-ssh` and deploy-folder auto-creation |
+| `test/fleet.impl.test.sh` | Internal behavior: atomic writes, staging modes, version precedence, deploy-folder lifecycle |
+| `test/entrypoint.spec.test.sh` / `entrypoint.impl.test.sh` | Inner daemon startup and supervision, including deploy SSH staging |
+| `test/deploy-ssh-check.spec.test.sh` | Deploy SSH check: host selection, PASS/FAIL, exit codes, learn mode, bastion diagnostics |
+| `test/deploy-ssh-check.impl.test.sh` | Deploy SSH check edge cases: `Host` parsing, keyscan output, strict hop checks, no-write guarantees |
+| `test/bootstrap.spec.test.sh` | Fresh-host installer with stubbed commands, including `deploy-ssh-check.sh` |
 
 Rules: specification tests (`*.spec.test.sh`) describe documented behavior and are written before
 implementation; a failing spec test means the implementation is wrong, never the test.

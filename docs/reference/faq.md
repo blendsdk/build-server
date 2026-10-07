@@ -23,9 +23,10 @@ workspace; workflows that need pristine state should clean up, or prefer ephemer
 
 **Where do credentials live?**
 
-Host-local and gitignored: `.env`, `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json`, `ssh/`.
-`fleet.sh build` stages them into the image with restricted modes and removes staged copies
-afterwards.
+Host-local and gitignored: `.env`, `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json`, `ssh/`, and
+the optional `deploy-ssh/` folders. `fleet.sh build` stages the baked files into the image with
+restricted modes and removes staged copies afterwards; `deploy-ssh/<org>/` is mounted read-only
+into its runner instead. See [Deploy over SSH](/guide/deploy-ssh).
 
 **How do I add a second organization?**
 
