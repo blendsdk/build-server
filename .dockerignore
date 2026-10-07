@@ -12,6 +12,7 @@ node_modules
 docker-compose.generated.yml*
 .runner-version
 .fleet-build
+deploy-ssh
 *.md
 LICENSE
 CONTRIBUTING.md
