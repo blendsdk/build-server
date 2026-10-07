@@ -67,35 +67,68 @@ storage_mounts_work() {
 # reports problems from inside the container.
 stage_deploy_ssh() {
     local source="${DEPLOY_SSH_SOURCE}"
-    local target="${RUNNER_USER_HOME}/.ssh/deploy.d"
-    local ssh_config="${RUNNER_USER_HOME}/.ssh/config"
+    local home="${RUNNER_USER_HOME}"
+    local target="${home}/.ssh/deploy.d"
+    local ssh_config="${home}/.ssh/config"
     local include_line="Include ~/.ssh/deploy.d/config"
+    local tmp=""
 
     [ -d "${source}" ] || return 0
 
-    if ! rm -rf "${target}" || ! mkdir -p "${target}" || ! cp -R "${source}/." "${target}/"; then
-        echo "WARNING: deploy-ssh staging failed; the runner starts without deploy SSH" >&2
+    # The runner's home normally exists from the image; create it for a fresh or overridden home
+    # so the staged material always lives in an owner-only directory.
+    if [ ! -d "${home}/.ssh" ]; then
+        if ! mkdir -p "${home}/.ssh"; then
+            echo "WARNING: deploy-ssh staging failed to create ${home}/.ssh; the runner starts without deploy SSH" >&2
+            return 0
+        fi
+        chmod 700 "${home}/.ssh" ||
+            echo "WARNING: could not restrict ${home}/.ssh modes" >&2
+        chown docker:docker "${home}/.ssh" ||
+            echo "WARNING: could not adjust ${home}/.ssh ownership" >&2
+    fi
+
+    if ! rm -rf "${target}"; then
+        echo "WARNING: deploy-ssh staging failed to remove ${target}; the runner starts without deploy SSH" >&2
         return 0
     fi
-    find "${target}" -type d -exec chmod 700 {} + ||
+    if ! mkdir -p "${target}"; then
+        echo "WARNING: deploy-ssh staging failed to create ${target}; the runner starts without deploy SSH" >&2
+        return 0
+    fi
+    if ! cp -R -- "${source}/." "${target}/"; then
+        echo "WARNING: deploy-ssh staging failed to copy ${source} to ${target}; the runner starts without deploy SSH" >&2
+        rm -rf "${target}"
+        return 0
+    fi
+    find -P "${target}" -type d -exec chmod 700 {} + ||
         echo "WARNING: deploy-ssh directory modes were not normalized" >&2
-    find "${target}" -type f -exec chmod 600 {} + ||
+    find -P "${target}" -type f -exec chmod 600 {} + ||
         echo "WARNING: deploy-ssh file modes were not normalized" >&2
     chown -R docker:docker "${target}" ||
         echo "WARNING: deploy-ssh ownership was not adjusted" >&2
 
     if [ -f "${target}/config" ]; then
-        if ! touch "${ssh_config}" || ! grep -qxF "${include_line}" "${ssh_config}" 2>/dev/null; then
-            if ! { printf '%s\n' "${include_line}"; cat "${ssh_config}" 2>/dev/null; } >"${ssh_config}.new" ||
-                ! mv "${ssh_config}.new" "${ssh_config}"; then
-                echo "WARNING: could not wire the deploy SSH include" >&2
-                rm -f "${ssh_config}.new"
+        if [ -L "${ssh_config}" ]; then
+            # Never write through a link as root: the runner user's home persists across boots.
+            echo "WARNING: ${ssh_config} is a symlink; skipping the deploy SSH include" >&2
+        else
+            if ! touch "${ssh_config}" || ! grep -qxF "${include_line}" "${ssh_config}" 2>/dev/null; then
+                if tmp="$(mktemp "${home}/.ssh/config.XXXXXX")" &&
+                    { printf '%s\n' "${include_line}"; cat "${ssh_config}" 2>/dev/null; } >"${tmp}" &&
+                    mv -f "${tmp}" "${ssh_config}"; then
+                    tmp=""
+                else
+                    echo "WARNING: could not wire the deploy SSH include" >&2
+                    [ -z "${tmp}" ] || rm -f "${tmp}"
+                    tmp=""
+                fi
             fi
+            chmod go-rwx "${ssh_config}" ||
+                echo "WARNING: could not restrict the SSH config modes" >&2
+            chown docker:docker "${ssh_config}" ||
+                echo "WARNING: could not adjust the SSH config ownership" >&2
         fi
-        chmod go-rwx "${ssh_config}" ||
-            echo "WARNING: could not restrict the SSH config modes" >&2
-        chown docker:docker "${ssh_config}" ||
-            echo "WARNING: could not adjust the SSH config ownership" >&2
     fi
 
     echo "Deploy SSH staged from ${source}"

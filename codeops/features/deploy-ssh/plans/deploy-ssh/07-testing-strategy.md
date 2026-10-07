@@ -57,11 +57,14 @@
 | # | Input / Scenario | Expected Output / Behavior | Source |
 | --- | ---------------- | -------------------------- | ------ |
 | ST-14 | Source fixture with `config`, `known_hosts`, `keys/prod` created with permissive modes (0644 files / 0755 dirs); run the entrypoint with `DEPLOY_SSH_SOURCE`/`RUNNER_USER_HOME` overrides and PATH stubs | `~/.ssh/deploy.d/` contains all files; files are exactly `600`, directories exactly `700`; the recording `chown` stub saw `-R docker:docker <target>`; the staging success line is printed | Req R4, PF-004 |
-| ST-15 | Same as ST-14; inspect `~/.ssh/config` after one and after two entrypoint runs | The first line is `Include ~/.ssh/deploy.d/config` and it appears exactly once after both runs | Req R5 / AR #10 |
+| ST-15 | Same as ST-14, with a pre-existing `~/.ssh/config` block (`Host github.com`); inspect after one and after two entrypoint runs | The first line is `Include ~/.ssh/deploy.d/config`, it appears exactly once, and the pre-existing block is preserved | Req R5 / AR #10, RV-101 |
 | ST-16 | Source with keys but no `config`; run | No include line is added to `~/.ssh/config` | Req R5 |
 | ST-17 | No source directory (`DEPLOY_SSH_SOURCE` missing); run | No `~/.ssh/deploy.d` is created; the runner starts normally | AR #14 |
 | ST-18 | Making the target parent unwritable so staging fails; run | A warning is printed; the runner still starts (`setpriv` invoked); exit status unchanged | AR #9 |
 | ST-19 | Target home pre-contains `deploy.d/stale` not present in the source; run | `stale` is gone after the run (fresh copy) | AR #14 |
+| ST-43 | Source contains a symlink to a file outside the folder; run staging | The link is staged as a link (not dereferenced) and the pointed-at file is unchanged | SA-103 |
+| ST-44 | `~/.ssh/config.new` is pre-planted as a symlink to a victim file; run staging with a config present | The victim is unchanged; the Include line is added and remains the first line | SA-101 |
+| ST-45 | Fresh `RUNNER_USER_HOME` without `.ssh`; run staging | `.ssh` exists at `700` and a `chown docker:docker` for it was recorded; staging succeeds | SA-102 |
 
 ### Connectivity check (03-03) — `test/deploy-ssh-check.spec.test.sh`, `test/fleet.spec.test.sh`
 
@@ -108,7 +111,7 @@
 | --------- | ---------------- | --------- |
 | `test/orgs.spec.test.sh` | ST-1..ST-10, ST-38, ST-41 | Fleet configuration / rendering |
 | `test/fleet.spec.test.sh` | ST-11..ST-13, ST-29..ST-32, ST-40 | CLI behavior |
-| `test/entrypoint.spec.test.sh` | ST-14..ST-19 | Container staging |
+| `test/entrypoint.spec.test.sh` | ST-14..ST-19, ST-43..ST-45 | Container staging |
 | `test/deploy-ssh-check.spec.test.sh` *(new)* | ST-20..ST-28, ST-36, ST-37, ST-39 | Check script |
 | `test/dockerfile.spec.test.sh` | ST-33, ST-35 | Packaging and hygiene |
 | `test/bootstrap.spec.test.sh` | ST-34 | Installer |
@@ -120,7 +123,7 @@
 | Test File | Description | Priority |
 | --------- | ----------- | -------- |
 | `test/fleet.impl.test.sh` | Auto-create on `restart`/`update`/`update-runners`/`upgrade-all`; byte-identical generation with `deploy_ssh`; a validation failure preserves the previous generated file; sentinel files survive `clean --yes` and `upgrade-all --yes` (PF-016); the creation notice is silent on repeat runs or when only `keys/` is missing (RV-004) | High |
-| `test/entrypoint.impl.test.sh` | Mode/ownership failures warn and continue; keys-only source without include; full re-copy when the source changes between boots; staging runs before the runner user starts (the `setpriv` stub records `deploy.d` existence) | High |
+| `test/entrypoint.impl.test.sh` | Mode/ownership failures warn and continue; keys-only source without include; full re-copy when the source changes between boots; staging runs before the runner user starts (the `setpriv` stub records `deploy.d` existence); config-only source; a pre-existing `~/.ssh/config` is preserved (RV-101, RV-103) | High |
 | `test/deploy-ssh-check.impl.test.sh` *(new)* | `Host` line parsing edge cases (inline comments, blank lines, mixed case, duplicates, multiple tokens); `-`-prefixed token rejection; empty `ssh-keyscan` output → FAIL; bastion authentication failure → `FAIL`, continue, exit 1; chained-jump unsupported message; multiple hosts with mixed results | Medium |
 
 ### Integration Tests

@@ -270,6 +270,8 @@ INCLUDE_SRC="${T}/include-src"
 INCLUDE_HOME="${T}/include-home"
 make_deploy_source "${INCLUDE_SRC}" full
 make_runner_home "${INCLUDE_HOME}"
+# Seed a config the way the image does, so prepending is proven to preserve existing content.
+printf 'Host github.com\n    IdentityFile ~/.ssh/id_rsa\n' > "${INCLUDE_HOME}/.ssh/config"
 run_staged_entry "${INCLUDE_SRC}" "${INCLUDE_HOME}" "${T}/out-include-1" || {
     cat "${T}/out-include-1" >&2
     fail "ST-15: the first staging boot should exit zero"
@@ -286,6 +288,10 @@ run_staged_entry "${INCLUDE_SRC}" "${INCLUDE_HOME}" "${T}/out-include-2" || {
 }
 [ "$(grep -c 'Include ~/.ssh/deploy.d/config' "${INCLUDE_CONFIG}")" -eq 1 ] ||
     fail "ST-15: the Include line must appear exactly once after repeated boots"
+grep -q 'Host github.com' "${INCLUDE_CONFIG}" ||
+    fail "ST-15: the pre-existing config block must be preserved"
+grep -q 'IdentityFile ~/.ssh/id_rsa' "${INCLUDE_CONFIG}" ||
+    fail "ST-15: the pre-existing config lines must be preserved"
 echo "PASS: ST-15 prepends the deploy Include line exactly once across boots"
 
 # ST-16: a keys-only source adds no Include line to ~/.ssh/config (negative).
@@ -337,6 +343,8 @@ chmod 700 "${FAIL_HOME}/.ssh"
     fail "ST-18: staging failure must not change the exit status, got ${STAGE_FAIL_CODE}"
 grep -qi 'warning' "${T}/out-stage-fail" ||
     fail "ST-18: a staging failure must print a warning"
+grep -q "deploy-ssh staging failed to create ${FAIL_HOME}/.ssh/deploy.d" "${T}/out-stage-fail" ||
+    fail "ST-18: the warning must name the failed step and the target path"
 grep -q 'setpriv' "${TRACE}" || fail "ST-18: the runner must still start after a staging failure"
 echo "PASS: ST-18 a staging failure warns and the runner still starts"
 
@@ -358,5 +366,63 @@ run_staged_entry "${STALE_SRC}" "${STALE_HOME}" "${T}/out-stale" || {
 [ -f "${STALE_HOME}/.ssh/deploy.d/config" ] ||
     fail "ST-19: the fresh copy must still be staged"
 echo "PASS: ST-19 staging replaces the target with a fresh copy"
+
+# ST-43: a symlink in the source is staged as a link and never dereferenced, so files outside the
+# deploy folder are neither modified nor copied.
+export TRACE="${T}/trace-symlink-src"
+: > "${TRACE}"
+LINK_SRC="${T}/symlink-src"
+LINK_HOME="${T}/symlink-home"
+make_deploy_source "${LINK_SRC}" full
+printf 'victim-original\n' > "${T}/symlink-victim"
+ln -sfn "${T}/symlink-victim" "${LINK_SRC}/link-out"
+make_runner_home "${LINK_HOME}"
+run_staged_entry "${LINK_SRC}" "${LINK_HOME}" "${T}/out-symlink-src" || {
+    cat "${T}/out-symlink-src" >&2
+    fail "ST-43: staging a source symlink should exit zero"
+}
+[ -L "${LINK_HOME}/.ssh/deploy.d/link-out" ] ||
+    fail "ST-43: a source symlink must be staged as a symlink"
+[ "$(cat "${T}/symlink-victim")" = "victim-original" ] ||
+    fail "ST-43: the symlink target must not be modified"
+echo "PASS: ST-43 a source symlink is staged without dereference"
+
+# ST-44: a pre-planted ~/.ssh/config.new symlink must not receive root writes.
+export TRACE="${T}/trace-planted"
+: > "${TRACE}"
+PLANT_SRC="${T}/planted-src"
+PLANT_HOME="${T}/planted-home"
+make_deploy_source "${PLANT_SRC}" full
+make_runner_home "${PLANT_HOME}"
+printf 'victim-original\n' > "${T}/planted-victim"
+ln -sfn "${T}/planted-victim" "${PLANT_HOME}/.ssh/config.new"
+run_staged_entry "${PLANT_SRC}" "${PLANT_HOME}" "${T}/out-planted" || {
+    cat "${T}/out-planted" >&2
+    fail "ST-44: staging with a planted config.new should exit zero"
+}
+[ "$(cat "${T}/planted-victim")" = "victim-original" ] ||
+    fail "ST-44: root must not write through a pre-planted symlink"
+[ "$(head -n1 "${PLANT_HOME}/.ssh/config")" = "Include ~/.ssh/deploy.d/config" ] ||
+    fail "ST-44: the Include line must still be wired"
+echo "PASS: ST-44 a pre-planted config.new symlink is not followed"
+
+# ST-45: a fresh runner home without .ssh gets an owner-only .ssh before staging.
+export TRACE="${T}/trace-fresh-home"
+: > "${TRACE}"
+FRESH_SRC="${T}/fresh-home-src"
+FRESH_HOME="${T}/fresh-home"
+make_deploy_source "${FRESH_SRC}" full
+mkdir -p "${FRESH_HOME}"
+run_staged_entry "${FRESH_SRC}" "${FRESH_HOME}" "${T}/out-fresh-home" || {
+    cat "${T}/out-fresh-home" >&2
+    fail "ST-45: staging into a fresh home should exit zero"
+}
+[ "$(stat -c '%a' "${FRESH_HOME}/.ssh")" = "700" ] ||
+    fail "ST-45: a missing .ssh must be created 0700"
+grep -q "chown docker:docker ${FRESH_HOME}/.ssh" "${TRACE}" ||
+    fail "ST-45: the created .ssh must be chowned to docker"
+[ -f "${FRESH_HOME}/.ssh/deploy.d/config" ] ||
+    fail "ST-45: staging must succeed in a fresh home"
+echo "PASS: ST-45 a fresh home gets an owner-only .ssh"
 
 echo "entrypoint spec tests: PASS"

@@ -36,20 +36,25 @@ home, with correct ownership and modes, and to wire the deploy config into the S
 stage_deploy_ssh():
   if DEPLOY_SSH_SOURCE is not a directory:            # no mount: nothing to do
       return 0
+  if RUNNER_USER_HOME/.ssh is missing:                # fresh or overridden home
+      create it 0700, chown docker:docker            # failures -> warn and return 0
   if removing ~/.ssh/deploy.d fails:                  # AR #14: always a fresh copy
-      warn and return 0                               # AR #9: never block the runner
+      warn (naming the step), return 0                # AR #9: never block the runner
   if creating ~/.ssh/deploy.d fails:
-      warn and return 0
+      warn (naming the step), return 0
   if copying DEPLOY_SSH_SOURCE/. into the target fails:
-      warn and return 0
+      warn (naming source and target); remove the partial target; return 0
   normalize modes per type: directories 700, files 600
-      (find <target> -type d -exec chmod 700 {} + / -type f -exec chmod 600 {} +; failure -> warn)
+      (find -P <target> -type d -exec chmod 700 {} + / -type f -exec chmod 600 {} +; failure -> warn)
   chown -R docker:docker the target     (failure -> warn)
   if the target contains a file named config:
-      ensure ~/.ssh/config exists
-      if it does not already contain the line exactly:
-          prepend: Include ~/.ssh/deploy.d/config
-      chmod go-rwx and chown docker:docker ~/.ssh/config (failures -> warn)
+      if ~/.ssh/config exists and is a symlink:       # root never writes through a link
+          warn and skip the include
+      else:
+          ensure ~/.ssh/config exists
+          if it does not already contain the line exactly:
+              prepend Include ~/.ssh/deploy.d/config using a fresh mktemp file inside ~/.ssh
+          chmod go-rwx and chown docker:docker ~/.ssh/config (failures -> warn)
   log: Deploy SSH staged from <source>
 ```
 
@@ -88,9 +93,11 @@ The warning goes to stderr; the container start sequence is unchanged (AR #9).
 | Error Case | Handling Strategy | AR Ref |
 | ---------- | ----------------- | ------ |
 | Mount absent | No-op; no directories touched | #14 |
-| Target removal, creation, or copy fails | Warning naming the failed step; runner continues without deploy SSH | #9 |
+| `~/.ssh` missing (fresh or overridden home) | Created `0700` and owned by `docker` before staging | SA-102 |
+| Target removal, creation, or copy fails | Warning naming the failed step plus source/target; a partial copy is removed; runner continues without deploy SSH | #9, RV-102, SA-102 |
 | `chmod`/`chown` fails | Warning; continues (the runner may still be usable, and `deploy-ssh-check` will expose the problem) | #9 |
 | `~/.ssh/config` missing | Created before the include line is added | #10 |
+| `~/.ssh/config` is a symlink | Warning; the include is skipped so root never writes through a link | SA-101 |
 | `config` already includes the line | Nothing added; repeated boots stay idempotent | #10 |
 | Mount present but empty | Empty `deploy.d` is staged; no include line; `deploy-ssh-check` exits 2 with the missing-configuration message | #4, #9 |
 
@@ -99,8 +106,9 @@ The warning goes to stderr; the container start sequence is unchanged (AR #9).
 
 ## Testing Requirements
 
-- Specification tests (see `07-testing-strategy.md`): ST-14..ST-19. The entrypoint spec harness
-  changes required by ST-14 are specified in `07-testing-strategy.md` §Test Data (permissive
-  fixture, recording `chown` stub, sandbox-guarded delegating `chmod` stub).
-- Implementation tests: warn-and-continue paths for mode/ownership failures, source containing only
-  a `config`, and repeated boots against alternated sources.
+- Specification tests (see `07-testing-strategy.md`): ST-14..ST-19, ST-43..ST-45. The entrypoint
+  spec harness changes required by ST-14 are specified in `07-testing-strategy.md` §Test Data
+  (permissive fixture, recording `chown` stub, sandbox-guarded delegating `chmod` stub).
+- Implementation tests: warn-and-continue paths for mode/ownership failures, a source containing
+  only a `config`, repeated boots against alternated sources, and preservation of a pre-existing
+  `~/.ssh/config`.

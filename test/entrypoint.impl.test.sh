@@ -180,6 +180,9 @@ IMPL_KEYS_SRC="${T}/impl-keys-only-src"
 IMPL_KEYS_HOME="${T}/impl-keys-only-home"
 make_deploy_source "${IMPL_KEYS_SRC}" keys-only
 make_runner_home "${IMPL_KEYS_HOME}"
+# Seed a config the way the image does; a keys-only source must leave it byte-identical.
+printf 'Host github.com\n    IdentityFile ~/.ssh/id_rsa\n' > "${IMPL_KEYS_HOME}/.ssh/config"
+cp "${IMPL_KEYS_HOME}/.ssh/config" "${T}/impl-keys-config.before"
 run_staged_entry "${IMPL_KEYS_SRC}" "${IMPL_KEYS_HOME}" "${T}/out-impl-keys-only" || {
     cat "${T}/out-impl-keys-only" >&2
     fail "a keys-only source should exit zero"
@@ -188,11 +191,31 @@ run_staged_entry "${IMPL_KEYS_SRC}" "${IMPL_KEYS_HOME}" "${T}/out-impl-keys-only
     fail "a keys-only source must stage its key"
 grep -q "Deploy SSH staged from ${IMPL_KEYS_SRC}" "${T}/out-impl-keys-only" ||
     fail "a keys-only source must print the staging success line"
-if [ -f "${IMPL_KEYS_HOME}/.ssh/config" ]; then
-    grep -q 'Include ~/.ssh/deploy.d/config' "${IMPL_KEYS_HOME}/.ssh/config" &&
-        fail "a keys-only source must not add the Include line"
-fi
-echo "PASS: a keys-only source stages the key without an Include line"
+grep -q 'Include ~/.ssh/deploy.d/config' "${IMPL_KEYS_HOME}/.ssh/config" &&
+    fail "a keys-only source must not add the Include line"
+cmp -s "${T}/impl-keys-config.before" "${IMPL_KEYS_HOME}/.ssh/config" ||
+    fail "a keys-only source must leave an existing ~/.ssh/config untouched"
+echo "PASS: a keys-only source stages the key and leaves the config untouched"
+
+# Config-only source: stages the config and wires the Include line without any keys.
+export TRACE="${T}/trace-impl-config-only"
+: > "${TRACE}"
+CONFIG_ONLY_SRC="${T}/impl-config-only-src"
+CONFIG_ONLY_HOME="${T}/impl-config-only-home"
+mkdir -p "${CONFIG_ONLY_SRC}"
+printf 'Host app-prod\n    User deploy\n' > "${CONFIG_ONLY_SRC}/config"
+make_runner_home "${CONFIG_ONLY_HOME}"
+run_staged_entry "${CONFIG_ONLY_SRC}" "${CONFIG_ONLY_HOME}" "${T}/out-impl-config-only" || {
+    cat "${T}/out-impl-config-only" >&2
+    fail "a config-only source should exit zero"
+}
+[ -f "${CONFIG_ONLY_HOME}/.ssh/deploy.d/config" ] ||
+    fail "a config-only source must stage its config"
+[ "$(head -n1 "${CONFIG_ONLY_HOME}/.ssh/config")" = "Include ~/.ssh/deploy.d/config" ] ||
+    fail "a config-only source must wire the Include line"
+grep -q "Deploy SSH staged from ${CONFIG_ONLY_SRC}" "${T}/out-impl-config-only" ||
+    fail "a config-only source must print the staging success line"
+echo "PASS: a config-only source stages the config and wires the Include line"
 
 # Alternated sources across boots: the second boot must reflect source B only (source A's extra
 # file is gone) and must not duplicate the Include line.

@@ -3,7 +3,7 @@
 > **Artifact**: Phase reviews for the deploy-ssh execution plan
 > **Mode**: auto-design (eligible technical fixes selected and recorded; no reserved decisions arose)
 > **CodeOps Artifact Schema**: 1
-> **Last Updated**: 2026-10-07 15:43
+> **Last Updated**: 2026-10-07 15:57
 
 ## Phase 1 — Fleet configuration and mounting
 
@@ -22,3 +22,20 @@
 | SA-003 | 🟡 | TOCTOU between parse-time validation and `ensure_deploy_dirs`: `mkdir -p` (and Compose at start) follow symlinks swapped in afterwards | Fixed (defense-in-depth): `ensure_deploy_dirs` re-canonicalizes each path before creation and skips it with a warning when it changed since validation |
 
 No 🔴/🟠 findings; no reserved decisions arose; nothing deferred. The accepted fixes were implemented, verified with the full suite, and committed as a follow-up.
+
+## Phase 2 — Container staging
+
+- Baseline tree: `5ce4b0949b9baaea8464cb400a578188971533c0` · phase diff: 585 lines (`entrypoint.sh`, two test suites, plan docs)
+- Reviewers (independent contexts): correctness-reviewer, security-auditor
+- Verify at review time: `bash test/verify.sh` → PASS (2026-10-07 15:51)
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| RV-101 | 🟠 | Tests never seeded a pre-existing `~/.ssh/config`, so a regression that overwrote the baked config instead of prepending would pass every case | Fixed: ST-15 seeds a config block and asserts it survives; the keys-only impl case asserts byte-identical preservation |
+| RV-102 | 🟡 | The copy-failure warning did not name the failed step (deviation from 03-02) | Fixed: per-step warnings naming the operation and paths; a partial copy is removed |
+| RV-103 | 🟡 | The spec-required config-only implementation case was missing | Fixed: added |
+| SA-101 | 🟡 | Root `touch`/write/`mv` on `~/.ssh/config` followed pre-planted symlinks (bounded by the trust model — jobs are root-equivalent via the inner daemon) | Fixed: a symlinked config is skipped with a warning; the prepend uses a fresh `mktemp` file inside `~/.ssh` |
+| SA-102 | 🟡 | A failed copy left a partial, root-owned `deploy.d`; a missing `~/.ssh` was never normalized | Fixed: the partial target is removed on copy failure; a missing `~/.ssh` is created `0700 docker:docker` |
+| SA-103 | 🟡 | Symlink and pre-planted-path properties were not pinned by tests | Fixed: ST-43 (source symlink preserved), ST-44 (pre-planted `config.new` symlink not followed), ST-45 (fresh home `.ssh` normalization) |
+
+No 🔴 findings. The single 🟠 (RV-101) was fixed; the fix diff received the one permitted scoped re-review.
