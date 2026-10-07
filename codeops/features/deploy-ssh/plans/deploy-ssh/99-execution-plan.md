@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:44
-> **Progress**: 11/39 tasks (28%)
+> **Last Updated**: 2026-10-07 15:48
+> **Progress**: 13/39 tasks (33%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -115,7 +115,8 @@ task-size criteria in `quality-checklist.md`)
 
 ## Phase 2: Container staging
 
-> **Phase baseline tree**: _(recorded by the exec-plan skill from a temporary-index snapshot)_
+> **Phase baseline tree**: 5ce4b0949b9baaea8464cb400a578188971533c0
+> **Expected changes** (scope: strict): `entrypoint.sh`, `test/entrypoint.spec.test.sh`, `test/entrypoint.impl.test.sh`, and the plan documents `99-execution-plan.md` (runtime records as needed)
 > **Lenses**: security
 > **Reasoning**: high — credential ownership/modes and non-fatal failure semantics
 
@@ -124,11 +125,11 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-02-container-staging.md`](03-02-container-staging.md) · AR #4, #5, #9, #10, #14
 **Objective**: Pin staging behavior (copy, modes, include, tolerance) as failing tests first.
 
-- [ ] 2.1.1 [spec-author] Write the staging spec cases ST-14..ST-19 — `test/entrypoint.spec.test.sh`
-- [ ] 2.1.2 Run the entrypoint spec suite and record the red-phase results (behavior-adding cases fail; ST-16 and ST-17 pass in red)
+- [x] 2.1.1 [spec-author] Write the staging spec cases ST-14..ST-19 — `test/entrypoint.spec.test.sh` ✅ (completed: 2026-10-07 15:48)
+- [x] 2.1.2 Run the entrypoint spec suite and record the red-phase results (behavior-adding cases fail; ST-16 and ST-17 pass in red) ✅ (completed: 2026-10-07 15:48)
 
 **Deliverables**:
-- [ ] ST-14..ST-19 exist; behavior-adding cases fail in red (ST-16 and ST-17 pass in red)
+- [x] ST-14..ST-19 exist; behavior-adding cases fail in red (ST-16 and ST-17 pass in red)
 
 **Verify**: `bash test/entrypoint.spec.test.sh` (expected red)
 
