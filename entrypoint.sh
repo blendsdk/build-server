@@ -14,6 +14,8 @@ DOCKER_READY_ATTEMPTS="${DOCKER_READY_ATTEMPTS:-60}"
 DOCKER_DATA_ROOT="${DOCKER_DATA_ROOT:-/var/lib/docker}"
 RUNNER_START_SCRIPT="${RUNNER_START_SCRIPT:-/start.sh}"
 DOCKERD_STORAGE_DRIVER="${DOCKERD_STORAGE_DRIVER:-}"
+DEPLOY_SSH_SOURCE="${DEPLOY_SSH_SOURCE:-/run/deploy-ssh}"
+RUNNER_USER_HOME="${RUNNER_USER_HOME:-/home/docker}"
 
 # The co-located registry is plain HTTP, so the inner daemon must treat it as insecure unless a
 # TLS endpoint replaces it (override INSECURE_REGISTRIES with a space-separated list, or empty).
@@ -58,6 +60,47 @@ storage_mounts_work() {
     [ "${code}" -eq 0 ] || [ "${code}" -eq 127 ]
 }
 
+# Copy the deploy SSH mount into the runner user's home with restricted modes and wire the SSH
+# client to it. The read-only mount keeps host ownership, which need not match the container's
+# "docker" user, so a root-side copy is the only way to hand the unprivileged runner user readable
+# keys. Failures never block the runner: deploy SSH is auxiliary, and the connectivity check
+# reports problems from inside the container.
+stage_deploy_ssh() {
+    local source="${DEPLOY_SSH_SOURCE}"
+    local target="${RUNNER_USER_HOME}/.ssh/deploy.d"
+    local ssh_config="${RUNNER_USER_HOME}/.ssh/config"
+    local include_line="Include ~/.ssh/deploy.d/config"
+
+    [ -d "${source}" ] || return 0
+
+    if ! rm -rf "${target}" || ! mkdir -p "${target}" || ! cp -R "${source}/." "${target}/"; then
+        echo "WARNING: deploy-ssh staging failed; the runner starts without deploy SSH" >&2
+        return 0
+    fi
+    find "${target}" -type d -exec chmod 700 {} + ||
+        echo "WARNING: deploy-ssh directory modes were not normalized" >&2
+    find "${target}" -type f -exec chmod 600 {} + ||
+        echo "WARNING: deploy-ssh file modes were not normalized" >&2
+    chown -R docker:docker "${target}" ||
+        echo "WARNING: deploy-ssh ownership was not adjusted" >&2
+
+    if [ -f "${target}/config" ]; then
+        if ! touch "${ssh_config}" || ! grep -qxF "${include_line}" "${ssh_config}" 2>/dev/null; then
+            if ! { printf '%s\n' "${include_line}"; cat "${ssh_config}" 2>/dev/null; } >"${ssh_config}.new" ||
+                ! mv "${ssh_config}.new" "${ssh_config}"; then
+                echo "WARNING: could not wire the deploy SSH include" >&2
+                rm -f "${ssh_config}.new"
+            fi
+        fi
+        chmod go-rwx "${ssh_config}" ||
+            echo "WARNING: could not restrict the SSH config modes" >&2
+        chown docker:docker "${ssh_config}" ||
+            echo "WARNING: could not adjust the SSH config ownership" >&2
+    fi
+
+    echo "Deploy SSH staged from ${source}"
+}
+
 echo "Starting Docker daemon..."
 start_dockerd
 if ! wait_for_dockerd; then
@@ -88,6 +131,9 @@ fi
 chown root:docker /var/run/docker.sock 2>/dev/null || true
 chmod 660 /var/run/docker.sock 2>/dev/null || true
 
+# Deploy SSH material rides in read-only from the host; stage it before the runner user starts.
+stage_deploy_ssh
+
 # The stop helpers are invoked from the signal traps below, not from the main flow.
 # shellcheck disable=SC2317
 stop_runner() {
@@ -107,7 +153,7 @@ trap 'stop_runner; stop_daemon; exit 130' INT
 trap 'stop_runner; stop_daemon; exit 143' TERM
 
 setpriv --reuid=docker --regid=docker --init-groups \
-    env HOME=/home/docker "${RUNNER_START_SCRIPT}" &
+    env HOME="${RUNNER_USER_HOME}" "${RUNNER_START_SCRIPT}" &
 RUNNER_PID=$!
 
 set +e

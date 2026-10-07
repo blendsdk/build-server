@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:48
-> **Progress**: 13/39 tasks (33%)
+> **Last Updated**: 2026-10-07 15:49
+> **Progress**: 16/39 tasks (41%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -140,13 +140,13 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-02-container-staging.md`](03-02-container-staging.md) §Implementation Details
 **Objective**: Stage the mount for the runner user and wire the SSH include.
 
-- [ ] 2.2.1 Add `DEPLOY_SSH_SOURCE` and `RUNNER_USER_HOME` overrides; use `RUNNER_USER_HOME` for the runner `HOME` — `entrypoint.sh`
-- [ ] 2.2.2 Implement `stage_deploy_ssh()` (fresh copy, modes, ownership, include line, warnings, success log) and call it before `setpriv` — `entrypoint.sh`
-- [ ] 2.2.3 Run the entrypoint spec cases; verify green
+- [x] 2.2.1 Add `DEPLOY_SSH_SOURCE` and `RUNNER_USER_HOME` overrides; use `RUNNER_USER_HOME` for the runner `HOME` — `entrypoint.sh` ✅ (completed: 2026-10-07 15:49)
+- [x] 2.2.2 Implement `stage_deploy_ssh()` (fresh copy, modes, ownership, include line, warnings, success log) and call it before `setpriv` — `entrypoint.sh` ✅ (completed: 2026-10-07 15:49)
+- [x] 2.2.3 Run the entrypoint spec cases; verify green ✅ (completed: 2026-10-07 15:49)
 
 **Deliverables**:
-- [ ] A started runner has `~/.ssh/deploy.d` owned by `docker` with `600`/`700` modes and the include line exactly once
-- [ ] Staging failures warn and never block the runner
+- [x] A started runner has `~/.ssh/deploy.d` owned by `docker` with `600`/`700` modes and the include line exactly once
+- [x] Staging failures warn and never block the runner
 
 **Verify**: `bash test/entrypoint.spec.test.sh`
 
