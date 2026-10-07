@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:49
-> **Progress**: 16/39 tasks (41%)
+> **Last Updated**: 2026-10-07 15:51
+> **Progress**: 18/39 tasks (46%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -157,11 +157,11 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`07-testing-strategy.md`](07-testing-strategy.md) §Implementation Tests
 **Objective**: Cover failure tolerance and re-copy internals.
 
-- [ ] 2.3.1 Extend `test/entrypoint.impl.test.sh` (chmod/chown failure warnings, keys-only source, source changes between boots, staging order before the runner user) — `test/entrypoint.impl.test.sh`
-- [ ] 2.3.2 Full verification — `bash test/verify.sh`
+- [x] 2.3.1 Extend `test/entrypoint.impl.test.sh` (chmod/chown failure warnings, keys-only source, source changes between boots, staging order before the runner user) — `test/entrypoint.impl.test.sh` ✅ (completed: 2026-10-07 15:51)
+- [x] 2.3.2 Full verification — `bash test/verify.sh` ✅ (completed: 2026-10-07 15:51)
 
 **Deliverables**:
-- [ ] Edge and failure paths covered
+- [x] Edge and failure paths covered
 
 **Verify**: `bash test/verify.sh`
 
