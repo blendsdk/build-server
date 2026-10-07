@@ -37,6 +37,13 @@ for pkg in git openssh-client; do
         fail "Dockerfile must install ${pkg}"
 done
 
+# The connectivity check ships in the image because `fleet.sh check-ssh` runs it inside the runner
+# container (docker compose exec), so it must be installed on PATH and executable.
+grep -Eq '^[[:space:]]*COPY[[:space:]].*deploy-ssh-check\.sh[[:space:]]+/usr/local/bin/deploy-ssh-check[[:space:]]*$' "${DOCKERFILE}" ||
+    fail "Dockerfile must COPY deploy-ssh-check.sh to /usr/local/bin/deploy-ssh-check"
+grep -Eq 'chmod[[:space:]]+(\+x|0?7[0-9]{2})[[:space:]].*\/usr\/local\/bin\/deploy-ssh-check' "${DOCKERFILE}" ||
+    fail "Dockerfile must mark /usr/local/bin/deploy-ssh-check executable"
+
 # Node package managers installed globally: pnpm is used by current projects.
 grep -Eq "(^|[[:space:]])pnpm([[:space:]]|$)" "${DOCKERFILE}" || fail "Dockerfile must install pnpm globally"
 grep -Eq "(^|[[:space:]])lerna([[:space:]]|$)" "${DOCKERFILE}" && fail "lerna must not be installed"

@@ -42,10 +42,10 @@ fi
 exit 0
 FLEET
     chmod +x "${dir}/fleet.sh"
-    for file in .dockerignore bootstrap.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
+    for file in .dockerignore bootstrap.sh deploy-ssh-check.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
         printf 'stub %s\n' "${file}" > "${dir}/${file}"
     done
-    chmod +x "${dir}/bootstrap.sh" "${dir}/start.sh" "${dir}/entrypoint.sh"
+    chmod +x "${dir}/bootstrap.sh" "${dir}/deploy-ssh-check.sh" "${dir}/start.sh" "${dir}/entrypoint.sh"
     for file in package.json package-lock.json AGENTS.md; do
         printf 'dev\n' > "${dir}/${file}"
     done
@@ -229,7 +229,7 @@ grep -q 'https://github.com/blendsdk/build-server.git' "${T}/trace" || fail "clo
 EXPECTED_AUTH="AUTHORIZATION: Basic $(printf 'x-access-token:secret-token' | base64 -w0)"
 grep -qF "${EXPECTED_AUTH}" "${T}/trace" ||
     fail "clone must authenticate with the token over HTTP basic auth"
-for file in .dockerignore bootstrap.sh fleet.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
+for file in .dockerignore bootstrap.sh fleet.sh deploy-ssh-check.sh docker-compose.yml Dockerfile start.sh entrypoint.sh; do
     [ -f "${T}/install/${file}" ] || fail "runtime file ${file} was not installed"
 done
 [ -e "${T}/install/.git" ] && fail "a clean install must not contain .git"
@@ -237,6 +237,8 @@ done
 [ -d "${T}/install/docs" ] && fail "a clean install must not contain the docs tree"
 [ -f "${T}/install/.build-server-manifest" ] || fail "the install manifest was not written"
 grep -qx 'fleet.sh' "${T}/install/.build-server-manifest" || fail "the manifest must list the runtime files"
+grep -qx 'deploy-ssh-check.sh' "${T}/install/.build-server-manifest" ||
+    fail "the manifest must list deploy-ssh-check.sh"
 grep -q '^REVISION=0123456789abcdef0123456789abcdef01234567$' "${T}/install/.build-server-version" ||
     fail "the installed revision was not recorded"
 CLONE_DEST="$(grep 'git .*clone' "${T}/trace" | tail -1 | awk '{print $NF}')"

@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 16:10
-> **Progress**: 27/39 tasks (69%)
+> **Last Updated**: 2026-10-07 16:23
+> **Progress**: 30/39 tasks (77%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -225,7 +225,8 @@ task-size criteria in `quality-checklist.md`)
 
 ## Phase 4: Packaging, documentation, and release validation
 
-> **Phase baseline tree**: _(recorded by the exec-plan skill from a temporary-index snapshot)_
+> **Phase baseline tree**: 8d388c592c658dd26712bcb4e231a0c89cf9fc62
+> **Expected changes** (scope: strict): `Dockerfile`, `bootstrap.sh`, `orgs.conf`, `test/dockerfile.spec.test.sh`, `test/bootstrap.spec.test.sh`, `docs/guide/deploy-ssh.md` (new), `docs/.vitepress/config.mts`, `docs/guide/{organizations,cli,custom-images}.md`, `docs/reference/{files,testing,faq}.md`, `docs/architecture/security.md`, `docs/operations/{upgrades,troubleshooting}.md`, and plan documents (`99-execution-plan.md`; runtime records as needed)
 > **Reasoning**: low — packaging and documentation with deterministic verification
 
 ### Step 4.1: Specification tests
@@ -233,12 +234,12 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`03-04-packaging-and-docs.md`](03-04-packaging-and-docs.md) · AR #23, #24, #25, #26
 **Objective**: Pin the image and installer wiring as failing static assertions first.
 
-- [ ] 4.1.1 [spec-author] Add the image-install spec case ST-33 — `test/dockerfile.spec.test.sh`
-- [ ] 4.1.2 [spec-author] Add the installer spec case ST-34 — `test/bootstrap.spec.test.sh`
-- [ ] 4.1.3 Run the spec suites and record the red-phase results (ST-33 and ST-34 fail in red; ST-35 was authored and verified in Phase 1)
+- [x] 4.1.1 [spec-author] Add the image-install spec case ST-33 — `test/dockerfile.spec.test.sh` ✅ (completed: 2026-10-07 16:23)
+- [x] 4.1.2 [spec-author] Add the installer spec case ST-34 — `test/bootstrap.spec.test.sh` ✅ (completed: 2026-10-07 16:23)
+- [x] 4.1.3 Run the spec suites and record the red-phase results (ST-33 and ST-34 fail in red; ST-35 was authored and verified in Phase 1) ✅ (completed: 2026-10-07 16:23)
 
 **Deliverables**:
-- [ ] ST-33 and ST-34 exist and fail for the expected reason
+- [x] ST-33 and ST-34 exist and fail for the expected reason
 
 **Verify**: `bash test/dockerfile.spec.test.sh && bash test/bootstrap.spec.test.sh` (expected red)
 
