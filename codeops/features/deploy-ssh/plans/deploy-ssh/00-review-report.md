@@ -3,7 +3,7 @@
 > **Artifact**: Phase reviews for the deploy-ssh execution plan
 > **Mode**: auto-design (eligible technical fixes selected and recorded; no reserved decisions arose)
 > **CodeOps Artifact Schema**: 1
-> **Last Updated**: 2026-10-07 16:18
+> **Last Updated**: 2026-10-07 16:22
 
 ## Phase 1 — Fleet configuration and mounting
 
@@ -59,3 +59,5 @@ No 🔴 findings. The single 🟠 (RV-101) was fixed; the fix diff received the 
 | SA-304 | 🟡 | The suites did not pin the strict-verification and no-write properties | Fixed: option assertions on every connection path and a learn no-write check |
 
 No 🔴 findings. The two 🟠 fixes received the one permitted scoped re-review.
+
+**Re-review result (2026-10-07 16:22):** all seven findings resolved; mutation checks confirm the new assertions are non-tautological; no regressions and no new findings. Accepted observations (non-blocking): the leading-`-` allowlist arm and the resolved-port check are inspection-only (low risk; both guards verified present), a nested re-jump on a hop is not inspected (exotic; single-hop and comma-chains are covered), and the `03-03` test-list line omitted the new cases — fixed in a follow-up doc edit.

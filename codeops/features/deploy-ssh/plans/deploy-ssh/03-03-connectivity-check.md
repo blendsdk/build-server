@@ -199,7 +199,7 @@ Append the lines above to the deploy folder's known_hosts on the host, restart t
 
 ## Testing Requirements
 
-- Specification tests (see `07-testing-strategy.md`): ST-20..ST-32, ST-36, ST-37, ST-39, ST-40.
+- Specification tests (see `07-testing-strategy.md`): ST-20..ST-32, ST-36, ST-37, ST-39, ST-40, ST-46, ST-47.
 - Implementation tests: `Host` parsing edge cases (inline comments, blank lines, mixed case,
   duplicates), `-`-prefixed token rejection, `ssh-keyscan` empty output, bastion authentication
   failure, chained-jump message, and exit-code propagation through `fleet.sh`.
