@@ -46,10 +46,11 @@
 | ST-9 | `deploy_ssh=.` | Message `deploy_ssh path must not be the repository root` | AR #16 |
 | ST-10 | A regular file exists at the declared path | Message `deploy_ssh 'x' is not a directory` | AR #12 |
 | ST-11 | Sandbox with `Alpha deploy_ssh=deploy-ssh/alpha`, stubbed docker; run `up`, then delete the folder and run `start` | `deploy-ssh/alpha/` and `deploy-ssh/alpha/keys/` exist with mode `0700` after both commands; a creation notice is printed each time the folder is missing; the compose calls still happen | AR #15, PF-007 |
-| ST-12 | Same sandbox; run `generate` and `status` | `deploy-ssh/alpha/` is NOT created by either command | AR #15, PF-016 |
+| ST-12 | Same sandbox; run `generate` and `status` | `deploy-ssh/alpha/` is NOT created by either command, and both commands exit 0 | AR #15, PF-016, RV-004 |
 | ST-13 | Folder contains `keep.txt`; run `down` with stubbed docker/curl | The folder and `keep.txt` still exist afterwards | AR #17 |
 | ST-38 | `deploy_ssh=ops/keys` and `deploy_ssh=deploy-ssh` (bare) | Message `deploy_ssh path must be inside 'deploy-ssh/'`; no generated file written | PF-003 |
-| ST-41 | `deploy_ssh=deploy-ssh/acme:prod` (and a `*` variant) | Message `deploy_ssh path must not contain '*', '?', '[', ':', or '$'` | PF-006 |
+| ST-41 | `deploy_ssh` values containing each of `*`, `?`, `[`, `:`, `$` | Message `deploy_ssh path must not contain '*', '?', '[', ':', or '$'` for every case | PF-006, SA-002 |
+| ST-42 | A symlink inside `deploy-ssh/` whose target directory name contains `:` (and a newline variant); `deploy_ssh` points at the symlink | Message `deploy_ssh '<value>' resolves to a path with unsupported characters`; no generated file written | SA-001 |
 
 ### Container staging (03-02) — `test/entrypoint.spec.test.sh`
 
@@ -118,7 +119,7 @@
 
 | Test File | Description | Priority |
 | --------- | ----------- | -------- |
-| `test/fleet.impl.test.sh` | Auto-create on `restart`/`update`/`update-runners`/`upgrade-all`; byte-identical generation with `deploy_ssh`; a validation failure preserves the previous generated file; sentinel files survive `clean --yes` and `upgrade-all --yes` (PF-016) | High |
+| `test/fleet.impl.test.sh` | Auto-create on `restart`/`update`/`update-runners`/`upgrade-all`; byte-identical generation with `deploy_ssh`; a validation failure preserves the previous generated file; sentinel files survive `clean --yes` and `upgrade-all --yes` (PF-016); the creation notice is silent on repeat runs or when only `keys/` is missing (RV-004) | High |
 | `test/entrypoint.impl.test.sh` | Mode/ownership failures warn and continue; keys-only source without include; full re-copy when the source changes between boots; staging runs before the runner user starts (the `setpriv` stub records `deploy.d` existence) | High |
 | `test/deploy-ssh-check.impl.test.sh` *(new)* | `Host` line parsing edge cases (inline comments, blank lines, mixed case, duplicates, multiple tokens); `-`-prefixed token rejection; empty `ssh-keyscan` output → FAIL; bastion authentication failure → `FAIL`, continue, exit 1; chained-jump unsupported message; multiple hosts with mixed results | Medium |
 

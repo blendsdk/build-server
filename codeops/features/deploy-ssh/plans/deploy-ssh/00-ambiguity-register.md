@@ -1,7 +1,7 @@
 # Ambiguity Register: deploy-ssh material for runner containers
 
 > **Status**: ✅ GATE PASSED — all 27 planning items resolved; 1 runtime item resolved (AR-28)
-> **Last Updated**: 2026-10-07 14:07
+> **Last Updated**: 2026-10-07 15:43
 
 | # | Category | Ambiguity / Gap | Options Presented | User Decision | Status |
 |---|----------|-----------------|-------------------|---------------|--------|

@@ -259,6 +259,36 @@ CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" upgrade-all --yes >"${S}/out"
 assert_deploy_created "${S}"
 echo "PASS: upgrade-all creates missing deploy-ssh folders with 0700"
 
+# --- deploy_ssh: the creation notice is silent when nothing was created -----------------------
+# Running a container-starting command again, or repairing only a missing keys/ directory, must
+# not announce a folder creation: the notice marks folder creation only.
+S="${T}/autocreate-notice"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up should create the deploy folder and continue"
+}
+grep -q 'created deploy-ssh/alpha' "${S}/out" || fail "the first up must announce the created folder"
+
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "a second up should succeed"
+}
+grep -q 'created deploy-ssh/alpha' "${S}/out" && fail "an existing folder must not be announced again"
+
+rm -rf "${S}/deploy-ssh/alpha/keys"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up with only keys/ missing should succeed"
+}
+[ -d "${S}/deploy-ssh/alpha/keys" ] || fail "up must restore a missing keys/ directory"
+grep -q 'created deploy-ssh/alpha' "${S}/out" &&
+    fail "a keys-only repair must not print the folder-creation notice"
+echo "PASS: the creation notice appears only when the folder itself is created"
+
 # --- deploy_ssh: rendering stays byte-identical across runs ----------------------------------
 S="${T}/deploy-idem"
 new_sandbox "${S}"

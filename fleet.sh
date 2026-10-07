@@ -211,6 +211,17 @@ validate_deploy_ssh() {
         "${ROOT}/deploy-ssh/"*) ;;
         *) die "orgs.conf:${lineno}: deploy_ssh path must be inside 'deploy-ssh/'" ;;
     esac
+    # Re-check the canonical path: a symlink target can carry characters the raw value never had,
+    # and those characters would flow into the generated Compose file's mount string.
+    local resolved_rel="${resolved#"${ROOT}"/}"
+    case "${resolved_rel}" in
+        *'*'* | *'?'* | *'['* | *':'* | *'$'*)
+            die "orgs.conf:${lineno}: deploy_ssh '${value}' resolves to a path with unsupported characters"
+            ;;
+    esac
+    if [[ "${resolved_rel}" =~ [[:cntrl:]] ]]; then
+        die "orgs.conf:${lineno}: deploy_ssh '${value}' resolves to a path with unsupported characters"
+    fi
     printf '%s' "${resolved}"
 }
 
@@ -287,13 +298,15 @@ ensure_deploy_dirs() {
         path="${ORG_DEPLOY_SSH[$i]}"
         [ -n "${path}" ] || continue
         rel="${path#"${ROOT}/"}"
+        if [ "$(realpath -m "${path}")" != "${path}" ]; then
+            echo "fleet: WARNING: ${rel} changed since validation; skipping deploy folder creation" >&2
+            continue
+        fi
         if [ ! -d "${path}" ]; then
-            umask 077
-            mkdir -p "${path}/keys"
+            (umask 077 && mkdir -p "${path}/keys")
             echo "fleet: created ${rel} (add config, known_hosts, and keys, then restart the runner to apply)"
         elif [ ! -d "${path}/keys" ]; then
-            umask 077
-            mkdir -p "${path}/keys"
+            (umask 077 && mkdir -p "${path}/keys")
         fi
     done
 }
@@ -569,6 +582,7 @@ update_runners() {
     local version
     version="$(fetch_latest_version)"
     rebuild_all "${version}"
+    ensure_deploy_dirs
     compose up -d
 }
 
@@ -672,15 +686,14 @@ case "${COMMAND}" in
         ;;
     update)
         parse_config
-        ensure_deploy_dirs
         render_compose
         [ "${#}" -ge 2 ] || die "update requires an organization"
+        ensure_deploy_dirs
         update_org "$(slugify "${2}")"
         prune_after_build
         ;;
     update-runners)
         parse_config
-        ensure_deploy_dirs
         render_compose
         update_runners
         prune_after_build
@@ -707,10 +720,10 @@ case "${COMMAND}" in
         ;;
     up)
         parse_config
-        ensure_deploy_dirs
         render_compose
         require_images
         remove_legacy_containers
+        ensure_deploy_dirs
         compose up -d
         ;;
     down)
@@ -728,17 +741,17 @@ case "${COMMAND}" in
         ;;
     start)
         parse_config
-        ensure_deploy_dirs
         render_compose
+        ensure_deploy_dirs
         compose start
         ;;
     restart)
         parse_config
-        ensure_deploy_dirs
         render_compose
         require_images
         remove_legacy_containers
         compose down --remove-orphans
+        ensure_deploy_dirs
         compose up -d
         ;;
     status)

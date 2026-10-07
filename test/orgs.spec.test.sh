@@ -299,6 +299,33 @@ expect_fail "${S}" "ST-41 colon" "orgs.conf:1: deploy_ssh path must not contain 
 S="${T}/sshglob"; new_sandbox "${S}"
 printf 'BadOrg deploy_ssh=deploy-ssh/a*b\n' > "${S}/orgs.conf"
 expect_fail "${S}" "ST-41 glob" "orgs.conf:1: deploy_ssh path must not contain '*', '?', '[', ':', or '\$'"
-echo "PASS: deploy_ssh validation rejects empty, absolute, traversal, escape, root, non-directory, outside, and metacharacter paths"
+
+S="${T}/sshquestion"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=deploy-ssh/a?b\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-41 question mark" "orgs.conf:1: deploy_ssh path must not contain '*', '?', '[', ':', or '\$'"
+
+S="${T}/sshbracket"; new_sandbox "${S}"
+printf 'BadOrg deploy_ssh=deploy-ssh/a[b\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-41 bracket" "orgs.conf:1: deploy_ssh path must not contain '*', '?', '[', ':', or '\$'"
+
+S="${T}/sshdollar"; new_sandbox "${S}"
+# shellcheck disable=SC2016  # the literal $ must stay in the config value under test
+printf 'BadOrg deploy_ssh=deploy-ssh/a$b\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-41 dollar" "orgs.conf:1: deploy_ssh path must not contain '*', '?', '[', ':', or '\$'"
+
+# ST-42: a symlink target can carry characters the raw value never had, and the resolved path is
+# what reaches the generated mount, so it is validated with the same character rules.
+S="${T}/sshlinkcolon"; new_sandbox "${S}"
+mkdir -p "${S}/deploy-ssh/a:b"
+ln -sfn "a:b" "${S}/deploy-ssh/link"
+printf 'BadOrg deploy_ssh=deploy-ssh/link\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-42 resolved colon" "orgs.conf:1: deploy_ssh 'deploy-ssh/link' resolves to a path with unsupported characters"
+
+S="${T}/sshlinknewline"; new_sandbox "${S}"
+mkdir -p "${S}/deploy-ssh/a"$'\n'"b"
+ln -sfn "a"$'\n'"b" "${S}/deploy-ssh/linknl"
+printf 'BadOrg deploy_ssh=deploy-ssh/linknl\n' > "${S}/orgs.conf"
+expect_fail "${S}" "ST-42 resolved newline" "orgs.conf:1: deploy_ssh 'deploy-ssh/linknl' resolves to a path with unsupported characters"
+echo "PASS: deploy_ssh validation rejects empty, absolute, traversal, escape, root, non-directory, outside, metacharacter, and resolved-path cases"
 
 echo "orgs spec tests: PASS"

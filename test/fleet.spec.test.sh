@@ -527,8 +527,14 @@ new_sandbox "${S}"
 printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
 set +e
 run_fleet "${S}" generate >"${S}/out" 2>&1
+GENERATE_EXIT=$?
 run_fleet "${S}" status >"${S}/out" 2>&1
+STATUS_EXIT=$?
 set -e
+[ "${GENERATE_EXIT}" -eq 0 ] ||
+    fail "generate must succeed with a declared deploy folder (exit ${GENERATE_EXIT})"
+[ "${STATUS_EXIT}" -eq 0 ] ||
+    fail "status must succeed with a declared deploy folder (exit ${STATUS_EXIT})"
 [ ! -e "${S}/deploy-ssh/alpha" ] || fail "generate/status must not create deploy-ssh/alpha"
 echo "PASS: generate and status never create deploy-ssh folders"
 

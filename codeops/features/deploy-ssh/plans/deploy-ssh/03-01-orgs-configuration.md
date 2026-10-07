@@ -56,6 +56,7 @@ Validation runs in `parse_config()` in this order and fails with a line-numbered
 | 6 | `realpath` (or `realpath -m` when missing) equals the repository root | `deploy_ssh path must not be the repository root` | #16 |
 | 7 | Resolved path is not inside the repository | `deploy_ssh '<value>' resolves outside the repository` | #12 |
 | 8 | Resolved path is not a strict subdirectory of `<root>/deploy-ssh` | `deploy_ssh path must be inside 'deploy-ssh/'` | PF-003 |
+| 9 | Resolved path contains `*`, `?`, `[`, `:`, `$`, or a control character | `deploy_ssh '<value>' resolves to a path with unsupported characters` | SA-001 |
 
 The resolved absolute path is stored in `ORG_DEPLOY_SSH`; rendering and creation use the path
 relative to the repository root. Validation never creates the folder; creation happens only in the
@@ -77,11 +78,14 @@ ensure_deploy_dirs() {
 }
 ```
 
-Call sites: `up`, `restart`, `start`, `update`, `update-runners`, `upgrade-all` — after
-`parse_config` and before the first `compose up` (for `upgrade-all`: after confirmation and the
-version fetch, immediately before `compose up`, so an aborted or failed upgrade creates nothing).
-`generate`, `down`, `stop`, `clean`, and `status` do not create folders (AR #15, refined by
-PF-007). Nothing ever deletes a folder (AR #17).
+Call sites: `up`, `restart`, `start`, `update`, `update-runners`, `upgrade-all` — each runs after
+its own failure points and immediately before its first `compose up` (for `upgrade-all`: after
+confirmation and the version fetch; for `update-runners`: after the fetch and rebuilds; for
+`update`: after the argument check), so an aborted command creates nothing. `generate`, `down`,
+`stop`, `clean`, and `status` do not create folders (AR #15, refined by PF-007 and RV-002). Each
+path is re-canonicalized immediately before creation; a path that changed since validation (for
+example a swapped symlink) is skipped with a warning (SA-003). Nothing ever deletes a folder
+(AR #17).
 
 ### Volume rendering
 

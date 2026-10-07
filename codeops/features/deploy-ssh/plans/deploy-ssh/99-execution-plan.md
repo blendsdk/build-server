@@ -2,7 +2,7 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 15:38
+> **Last Updated**: 2026-10-07 15:44
 > **Progress**: 11/39 tasks (28%)
 > **CodeOps Artifact Schema**: 1
 
@@ -54,7 +54,7 @@ task-size criteria in `quality-checklist.md`)
 ## Phase 1: Fleet configuration and mounting
 
 > **Phase baseline tree**: 2abaea015d0e0e1a8c63c63e2274273a7eb40f9f
-> **Expected changes** (scope: strict): `fleet.sh`, `test/orgs.spec.test.sh`, `test/fleet.spec.test.sh`, `test/fleet.impl.test.sh`, `test/dockerfile.spec.test.sh`, `.gitignore`, `.dockerignore`, `codeops/features/deploy-ssh/plans/deploy-ssh/99-execution-plan.md`
+> **Expected changes** (scope: strict): `fleet.sh`, `test/orgs.spec.test.sh`, `test/fleet.spec.test.sh`, `test/fleet.impl.test.sh`, `test/dockerfile.spec.test.sh`, `.gitignore`, `.dockerignore`, and the plan documents `99-execution-plan.md`, `00-ambiguity-register.md`, `03-04-packaging-and-docs.md`, `07-testing-strategy.md`, `03-01-orgs-configuration.md`, `00-review-report.md`
 > **Lenses**: security
 > **Reasoning**: high — path validation is security-relevant and the renderer feeds every runner
 
