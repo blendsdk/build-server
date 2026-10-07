@@ -21,6 +21,7 @@ bash test/start.impl.test.sh
 bash test/fleet.spec.test.sh
 bash test/fleet.impl.test.sh
 bash test/deploy-ssh-check.spec.test.sh
+bash test/deploy-ssh-check.impl.test.sh
 bash test/bootstrap.spec.test.sh
 
 echo "removed-script references..."

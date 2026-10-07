@@ -2,8 +2,8 @@
 
 > **Document**: 99-execution-plan.md
 > **Parent**: [Index](00-index.md)
-> **Last Updated**: 2026-10-07 16:08
-> **Progress**: 25/39 tasks (64%)
+> **Last Updated**: 2026-10-07 16:10
+> **Progress**: 27/39 tasks (69%)
 > **CodeOps Artifact Schema**: 1
 
 ## Overview
@@ -213,11 +213,11 @@ task-size criteria in `quality-checklist.md`)
 **Reference**: [`07-testing-strategy.md`](07-testing-strategy.md) §Implementation Tests
 **Objective**: Cover parsing edges and failure paths.
 
-- [ ] 3.3.1 Write `test/deploy-ssh-check.impl.test.sh` (parsing edges, empty keyscan output, bastion authentication failure, chained jumps, mixed results) and add it to `test/verify.sh` — `test/deploy-ssh-check.impl.test.sh`
-- [ ] 3.3.2 Full verification — `bash test/verify.sh`
+- [x] 3.3.1 Write `test/deploy-ssh-check.impl.test.sh` (parsing edges, empty keyscan output, bastion authentication failure, chained jumps, mixed results) and add it to `test/verify.sh` — `test/deploy-ssh-check.impl.test.sh` ✅ (completed: 2026-10-07 16:10)
+- [x] 3.3.2 Full verification — `bash test/verify.sh` ✅ (completed: 2026-10-07 16:10)
 
 **Deliverables**:
-- [ ] Edge and failure paths covered
+- [x] Edge and failure paths covered
 
 **Verify**: `bash test/verify.sh`
 
