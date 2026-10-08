@@ -1,5 +1,6 @@
 #!/bin/bash
-# Specification tests for the fleet CLI build, update, lifecycle, and deploy-ssh key commands.
+# Specification tests for the fleet CLI build, update, lifecycle, deploy-ssh key commands, and
+# exchange-folder provisioning.
 #
 # Every external command is stubbed on PATH and records its arguments; the tests assert the exact
 # sequence and arguments the CLI must produce, plus the staging, version-state, deploy-folder
@@ -993,5 +994,124 @@ SECOND_LINE="$(grep -nF 'argv[app-worker-02]' "${S}/trace" | cut -d: -f1)"
 [ -n "${SECOND_LINE}" ] || fail "the second host must arrive as its own argument"
 [ "${FIRST_LINE}" -lt "${SECOND_LINE}" ] || fail "the host order must be preserved"
 echo "PASS: check-ssh forwards a host list in order"
+
+# --- generate mounts the exchange folder for every runner -------------------------------------
+# ST-62: every generated runner service must mount its organization's exchange folder read-write
+# at /srv/exchange, next to the deploy-ssh and build-temp mounts, and one mount must not displace
+# the others.
+S="${T}/exchange-render"
+new_sandbox "${S}"
+printf 'Alpha\nBeta build_temp=1\nGamma deploy_ssh=deploy-ssh/gamma\n' > "${S}/orgs.conf"
+run_fleet "${S}" generate >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "generate should succeed"
+}
+GENERATED="${S}/docker-compose.generated.yml"
+[ "$(grep -cE '^      - ./exchange/[a-z]+:/srv/exchange$' "${GENERATED}")" -eq 3 ] ||
+    fail "every runner service must mount its exchange folder"
+for slug in alpha beta gamma; do
+    grep -qE "^      - ./exchange/${slug}:/srv/exchange$" "${GENERATED}" ||
+        fail "runner ${slug} must mount ./exchange/${slug} at /srv/exchange"
+done
+grep -qF -- '- ./deploy-ssh/gamma:/run/deploy-ssh:ro' "${GENERATED}" ||
+    fail "the deploy-ssh mount must stay read-only"
+grep -qF -- '- /tmp:/build-temp' "${GENERATED}" || fail "the build-temp mount must stay"
+echo "PASS: generate mounts the exchange folder for every runner"
+
+# --- up and start create the exchange folder (0777) with a notice -----------------------------
+# ST-63: a missing exchange folder must be created before the runner containers start, with a
+# notice, and the lifecycle command must still run. Removing the folder again must make the next
+# container-starting command recreate it.
+S="${T}/exchange-create"
+new_sandbox "${S}"
+: > "${S}/trace"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up should create the missing exchange folders and continue"
+}
+[ -d "${S}/exchange/alpha" ] || fail "up must create exchange/alpha"
+[ -d "${S}/exchange/beta" ] || fail "up must create exchange/beta"
+[ "$(stat -c '%a' "${S}/exchange/alpha")" = "777" ] || fail "exchange/alpha must be 0777"
+grep -qF 'fleet: created exchange/alpha (shared artifact exchange, mode 0777)' "${S}/out" ||
+    fail "up must announce the created exchange folder"
+grep -q 'up -d' "${S}/trace" || fail "up must still start the fleet after creating the folders"
+
+rm -rf "${S}/exchange/alpha"
+: > "${S}/trace"
+run_fleet "${S}" start >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "start should recreate the missing exchange folder and continue"
+}
+[ "$(stat -c '%a' "${S}/exchange/alpha")" = "777" ] ||
+    fail "recreated exchange/alpha must be 0777"
+grep -qF 'fleet: created exchange/alpha' "${S}/out" ||
+    fail "start must announce the recreated exchange folder"
+echo "PASS: up and start create the exchange folder with 0777 and a notice"
+
+# --- provisioning and teardown never modify an existing exchange folder -----------------------
+# ST-64: an existing exchange folder (here 0700 with a marker file) must survive up byte-for-byte
+# with its mode unchanged and no creation notice; down and clean must preserve it too.
+S="${T}/exchange-preserve"
+new_sandbox "${S}"
+mkdir -p "${S}/exchange/alpha"
+printf 'artifact\n' > "${S}/exchange/alpha/keep.txt"
+chmod 700 "${S}/exchange/alpha"
+: > "${S}/trace"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up with an existing exchange folder should succeed"
+}
+[ "$(stat -c '%a' "${S}/exchange/alpha")" = "700" ] ||
+    fail "up must not change the mode of an existing exchange folder"
+[ "$(cat "${S}/exchange/alpha/keep.txt")" = "artifact" ] ||
+    fail "up must not touch files inside the exchange folder"
+grep -qF 'fleet: created exchange/alpha' "${S}/out" &&
+    fail "no creation notice may print for an existing exchange folder"
+set +e
+CURL_BODY='{"total_count":0,"runners":[]}' CURL_HTTP_CODE=200 run_fleet "${S}" down >"${S}/out" 2>&1
+run_fleet "${S}" clean --yes >"${S}/out" 2>&1
+set -e
+[ "$(stat -c '%a' "${S}/exchange/alpha")" = "700" ] ||
+    fail "down and clean must not change the exchange folder mode"
+[ "$(cat "${S}/exchange/alpha/keep.txt")" = "artifact" ] ||
+    fail "down and clean must not delete exchange folder contents"
+echo "PASS: up, down, and clean preserve an existing exchange folder"
+
+# --- generate, status, stop, down, and clean never create exchange folders --------------------
+# ST-65: side-effect-free commands must not create exchange folders.
+S="${T}/exchange-readonly"
+new_sandbox "${S}"
+set +e
+run_fleet "${S}" generate >"${S}/out" 2>&1
+GENERATE_EXIT=$?
+run_fleet "${S}" status >"${S}/out" 2>&1
+STATUS_EXIT=$?
+CURL_BODY='{"total_count":0,"runners":[]}' CURL_HTTP_CODE=200 run_fleet "${S}" stop >"${S}/out" 2>&1
+CURL_BODY='{"total_count":0,"runners":[]}' CURL_HTTP_CODE=200 run_fleet "${S}" down >"${S}/out" 2>&1
+run_fleet "${S}" clean --yes >"${S}/out" 2>&1
+set -e
+[ "${GENERATE_EXIT}" -eq 0 ] || fail "generate must succeed (exit ${GENERATE_EXIT})"
+[ "${STATUS_EXIT}" -eq 0 ] || fail "status must succeed (exit ${STATUS_EXIT})"
+[ ! -e "${S}/exchange" ] ||
+    fail "generate/status/stop/down/clean must not create exchange folders"
+echo "PASS: generate, status, stop, down, and clean never create exchange folders"
+
+# --- a non-directory exchange entry fails before the fleet starts ------------------------------
+# ST-66: a regular file at exchange/<slug> cannot be bind-mounted; the command must fail with a
+# clear message and must not start the fleet.
+S="${T}/exchange-not-a-dir"
+new_sandbox "${S}"
+mkdir -p "${S}/exchange"
+printf 'not a folder\n' > "${S}/exchange/alpha"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" up >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "up must fail when exchange/alpha is not a directory"
+grep -qF 'exchange/alpha exists but is not a directory' "${S}/out" ||
+    fail "the failure must explain the non-directory entry"
+grep -q 'up -d' "${S}/trace" && fail "the fleet must not start with a broken exchange folder"
+echo "PASS: a non-directory exchange entry fails before the fleet starts"
 
 echo "fleet spec tests: PASS"

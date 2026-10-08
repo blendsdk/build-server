@@ -14,7 +14,7 @@
 | Feature | Roadmap | Stage Summary | Progress | Status | Last Updated |
 |---------|---------|---------------|----------|--------|--------------|
 | deploy-ssh | [→](features/deploy-ssh/00-roadmap.md) | keygen done · check-ssh args done | n/a | ✅ | 2026-10-08 |
-| _maintenance | [→](features/_maintenance/00-roadmap.md) | 15 tasks · exchange folder planned | n/a | 🔄 | 2026-10-08 |
+| _maintenance | [→](features/_maintenance/00-roadmap.md) | 15 tasks · exchange folder executing | n/a | 🔄 | 2026-10-08 |
 
 ## Archived
 

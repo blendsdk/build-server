@@ -29,4 +29,4 @@
 | T-12 | Drop the unused work_queue lock helper | — | — | Done | ✅ | 2026-10-03 | — |
 | T-13 | Allowlist pnpm's install script under npm 12 | — | — | Done | ✅ | 2026-10-06 | — |
 | T-14 | Fleet cleanup: clean and upgrade-all commands | — | — | Done | ✅ | 2026-10-06 | — |
-| T-15 | Shared artifact exchange folder | — | [exchange-folder](plans/exchange-folder/99-execution-plan.md) | Backlog | ⬜ | 2026-10-08 | — |
+| T-15 | Shared artifact exchange folder | — | [exchange-folder](plans/exchange-folder/99-execution-plan.md) | Executing | 🔄 | 2026-10-08 | — |
