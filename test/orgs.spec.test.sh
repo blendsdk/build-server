@@ -123,11 +123,30 @@ WithTemp build_temp=1
 WithoutTemp
 EOF
 MODEL="$(render_json "${S}")"
-WITH="$(jq -r '.services.withtemp.volumes[]?.target' <<<"${MODEL}")"
-WITHOUT="$(jq -r '.services.withouttemp.volumes[]?.target' <<<"${MODEL}")"
-[ "${WITH}" = "/build-temp" ] || fail "withtemp must mount /build-temp (got ${WITH})"
-[ -z "${WITHOUT}" ] || fail "withouttemp must not mount build-temp (got ${WITHOUT})"
+WITH="$(jq -r '[.services.withtemp.volumes[]?.target] | index("/build-temp")' <<<"${MODEL}")"
+WITHOUT="$(jq -r '[.services.withouttemp.volumes[]?.target] | index("/build-temp")' <<<"${MODEL}")"
+[ "${WITH}" != "null" ] || fail "withtemp must mount /build-temp"
+[ "${WITHOUT}" = "null" ] || fail "withouttemp must not mount build-temp"
 echo "PASS: build_temp is scoped to its org"
+
+# --- every org mounts its own exchange folder read-write (T-15) ------------------------------
+S="${T}/exchange"; new_sandbox "${S}"
+printf 'AcmeTools\nWithTemp build_temp=1\n' > "${S}/orgs.conf"
+MODEL="$(render_json "${S}")"
+for slug in acmetools withtemp; do
+    MOUNT="$(jq -c --arg s "${slug}" '[.services[$s].volumes[] | select(.target == "/srv/exchange")]' <<<"${MODEL}")"
+    [ "$(jq -r 'length' <<<"${MOUNT}")" -eq 1 ] ||
+        fail "T-15: ${slug} must mount /srv/exchange exactly once"
+    [ "$(jq -r '.[0].type' <<<"${MOUNT}")" = "bind" ] ||
+        fail "T-15: the ${slug} exchange mount must be a bind mount"
+    [ "$(jq -r '.[0].read_only // false' <<<"${MOUNT}")" = "false" ] ||
+        fail "T-15: the ${slug} exchange mount must be read-write"
+    case "$(jq -r '.[0].source' <<<"${MOUNT}")" in
+        */exchange/${slug}) ;;
+        *) fail "T-15: ${slug} must mount its own exchange folder" ;;
+    esac
+done
+echo "PASS: every org mounts its own exchange folder read-write"
 
 # --- Validation failures name the line and write nothing -----------------------------------
 S="${T}/badkey"; new_sandbox "${S}"
@@ -209,15 +228,12 @@ S="${T}/sshmount"; new_sandbox "${S}"
 mkdir -p "${S}/deploy-ssh/acmetools"
 printf 'AcmeTools deploy_ssh=deploy-ssh/acmetools\n' > "${S}/orgs.conf"
 MODEL="$(render_json "${S}")"
-[ "$(jq -r '.services.acmetools.volumes | length' <<<"${MODEL}")" -eq 1 ] ||
-    fail "ST-1: acmetools must have exactly one volume"
-[ "$(jq -r '.services.acmetools.volumes[0].type' <<<"${MODEL}")" = "bind" ] ||
-    fail "ST-1: the deploy mount must be a bind volume"
-[ "$(jq -r '.services.acmetools.volumes[0].target' <<<"${MODEL}")" = "/run/deploy-ssh" ] ||
-    fail "ST-1: the deploy mount target must be /run/deploy-ssh"
-[ "$(jq -r '.services.acmetools.volumes[0].read_only' <<<"${MODEL}")" = "true" ] ||
-    fail "ST-1: the deploy mount must be read-only"
-jq -e '.services.acmetools.volumes[0].source | endswith("/deploy-ssh/acmetools")' <<<"${MODEL}" >/dev/null ||
+# The exchange mount is universal, so find the deploy mount by its target, not by position.
+jq -e '[.services.acmetools.volumes[] | select(.target == "/run/deploy-ssh")] | length == 1' <<<"${MODEL}" >/dev/null ||
+    fail "ST-1: acmetools must have exactly one /run/deploy-ssh volume"
+jq -e '[.services.acmetools.volumes[] | select(.target == "/run/deploy-ssh")][0] | .type == "bind" and .read_only == true' <<<"${MODEL}" >/dev/null ||
+    fail "ST-1: the deploy mount must be a read-only bind volume"
+jq -e '[.services.acmetools.volumes[] | select(.target == "/run/deploy-ssh")][0].source | endswith("/deploy-ssh/acmetools")' <<<"${MODEL}" >/dev/null ||
     fail "ST-1: the deploy mount source must end in /deploy-ssh/acmetools"
 echo "PASS: ST-1 deploy_ssh renders a read-only /run/deploy-ssh mount"
 
@@ -245,15 +261,17 @@ S="${T}/sshshared"; new_sandbox "${S}"
 mkdir -p "${S}/deploy-ssh/shared"
 printf 'One deploy_ssh=deploy-ssh/shared\nTwo deploy_ssh=deploy-ssh/shared\n' > "${S}/orgs.conf"
 MODEL="$(render_json "${S}")"
-[ "$(jq -r '.services.one.volumes[0].target' <<<"${MODEL}")" = "/run/deploy-ssh" ] ||
-    fail "ST-4: one must mount /run/deploy-ssh"
-[ "$(jq -r '.services.two.volumes[0].target' <<<"${MODEL}")" = "/run/deploy-ssh" ] ||
-    fail "ST-4: two must mount /run/deploy-ssh"
-ONE_SRC="$(jq -r '.services.one.volumes[0].source' <<<"${MODEL}")"
-TWO_SRC="$(jq -r '.services.two.volumes[0].source' <<<"${MODEL}")"
+for svc in one two; do
+    jq -e --arg s "${svc}" '[.services[$s].volumes[] | select(.target == "/run/deploy-ssh")] | length == 1' <<<"${MODEL}" >/dev/null ||
+        fail "ST-4: ${svc} must mount /run/deploy-ssh"
+done
+ONE_SRC="$(jq -r '[.services.one.volumes[] | select(.target == "/run/deploy-ssh")][0].source' <<<"${MODEL}")"
+TWO_SRC="$(jq -r '[.services.two.volumes[] | select(.target == "/run/deploy-ssh")][0].source' <<<"${MODEL}")"
 [ "${ONE_SRC}" = "${TWO_SRC}" ] || fail "ST-4: both orgs must share the same deploy_ssh source"
-jq -e '.services.one.volumes[0].source | endswith("/deploy-ssh/shared")' <<<"${MODEL}" >/dev/null ||
-    fail "ST-4: the shared source must end in /deploy-ssh/shared"
+case "${ONE_SRC}" in
+    */deploy-ssh/shared) ;;
+    *) fail "ST-4: the shared source must end in /deploy-ssh/shared" ;;
+esac
 echo "PASS: ST-4 two orgs share one deploy_ssh folder"
 
 # --- deploy_ssh validation rejects unsafe paths, one input per rule (ST-5..ST-10, ST-38, ST-41)

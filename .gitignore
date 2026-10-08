@@ -12,6 +12,7 @@ yarnrc
 # Local working directories
 temp
 registry
+/exchange/
 
 # Node
 node_modules
