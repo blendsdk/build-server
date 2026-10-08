@@ -1,7 +1,7 @@
 # Task T-03: Pass extra arguments through check-ssh
 
 > **Type**: Task (lightweight) · **Feature**: deploy-ssh · **CodeOps Artifact Schema**: 1
-> **Progress**: 0/4 tasks (0%)
+> **Progress**: 1/4 tasks (25%)
 > **Reasoning**: medium — user-facing CLI change; the passthrough must stay argv-based
 > **Phase baseline tree**: 755f5cac7f37b8820950311990ab62c8c24fa770
 > **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `docs/guide/deploy-ssh.md`, `docs/guide/cli.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/deploy-ssh/00-roadmap.md`, `codeops/00-roadmap.md`)
@@ -39,9 +39,10 @@ the organization and the container. No new commands, flags, or files.
 
 ## Tasks
 
-- [~] T-03.1 Add ST-60..ST-61 to `test/fleet.spec.test.sh` ⏳ (implemented: 2026-10-08 09:47)
-- [ ] T-03.2 Run the fleet spec suite and record the red phase (the forwarding cases fail; existing
-  cases stay green)
+- [x] T-03.1 Add ST-60..ST-61 to `test/fleet.spec.test.sh` ✅ (completed: 2026-10-08 09:47)
+- [x] T-03.2 Run the fleet spec suite and record the red phase (the forwarding cases fail; existing
+  cases stay green) ✅ (completed: 2026-10-08 09:47 — 45 existing sections green, then FAIL at
+  ST-60 as expected)
 - [ ] T-03.3 Implement the forwarding in `fleet.sh`: drop the extra-argument guard, pass the
   remaining arguments verbatim, and update the usage text and messages
 - [ ] T-03.4 Update the docs (`docs/guide/deploy-ssh.md` learn and explicit-host examples,
