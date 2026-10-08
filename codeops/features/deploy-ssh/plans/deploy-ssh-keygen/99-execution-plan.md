@@ -1,7 +1,7 @@
 # Task T-02: Deploy SSH starter files and key generation
 
 > **Type**: Task (lightweight) · **Feature**: deploy-ssh · **CodeOps Artifact Schema**: 1
-> **Progress**: 5/6 tasks (83%)
+> **Progress**: 6/6 tasks (100%)
 > **Reasoning**: medium — bounded CLI addition and starter-file seeding in existing, well-tested code
 > **Phase baseline tree**: 8d1fd6914e2fb74d4d010f9771360630ac1d715c
 > **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `test/fleet.impl.test.sh`, `docs/guide/deploy-ssh.md`, `docs/guide/cli.md`, `docs/reference/files.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/deploy-ssh/00-roadmap.md`, `codeops/00-roadmap.md`)
@@ -134,7 +134,8 @@ implementation tests use the real `ssh-keygen`.
   matches, mode 0600; repeated provisioning is byte-idempotent; `--force` replaces the pair) and
   run green ✅ (completed: 2026-10-08 09:13 — 21 impl sections green; the derived-key comparison
   trims the comment this ssh-keygen version prints)
-- [~] T-02.6 Update docs (`docs/guide/deploy-ssh.md`, `docs/guide/cli.md`,
-  `docs/reference/files.md`) and run the full verification ⏳ (implemented: 2026-10-08 09:13)
+- [x] T-02.6 Update docs (`docs/guide/deploy-ssh.md`, `docs/guide/cli.md`,
+  `docs/reference/files.md`) and run the full verification ✅ (completed: 2026-10-08 09:14 — full
+  verify and docs build pass)
 
 **Verify**: `bash test/verify.sh`; because docs change, also `npm ci && npm run docs:build`
