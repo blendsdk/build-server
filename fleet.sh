@@ -53,6 +53,7 @@ Usage: fleet.sh <command> [args]
   upgrade-all [--yes]      Full teardown, cleanup, rebuild with the latest runner, and restart
   status                   Show the fleet and container state
   check-ssh <org>          Run the deploy SSH connectivity check in one organization's runner
+  keygen <org> [name]      Create a deploy key pair for one organization (ed25519; --rsa, --force)
 EOF
 }
 
@@ -834,6 +835,86 @@ case "${COMMAND}" in
         [ -n "${ORG_DEPLOY_SSH[$check_ssh_index]}" ] ||
             die "organization '${check_ssh_slug}' has no deploy_ssh configured"
         compose exec -u docker "${check_ssh_slug}" deploy-ssh-check
+        ;;
+    # Create a deploy key pair for one organization. The folder is seeded like a container-starting
+    # command seeds it; an existing pair is protected unless --force is passed. No passphrase is set
+    # because the runner has no SSH agent to unlock one.
+    keygen)
+        parse_config
+        shift
+        keygen_usage="usage: fleet.sh keygen <org> [name] [--rsa] [--force]"
+        keygen_org="" keygen_name="" keygen_rsa=0 keygen_force=0
+        for keygen_arg in "$@"; do
+            case "${keygen_arg}" in
+                --rsa) keygen_rsa=1 ;;
+                --force) keygen_force=1 ;;
+                -*) die "${keygen_usage}" ;;
+                *)
+                    if [ -z "${keygen_org}" ]; then
+                        keygen_org="${keygen_arg}"
+                    elif [ -z "${keygen_name}" ]; then
+                        keygen_name="${keygen_arg}"
+                    else
+                        die "${keygen_usage}"
+                    fi
+                    ;;
+            esac
+        done
+        [ -n "${keygen_org}" ] || die "${keygen_usage}"
+        keygen_slug="$(slugify "${keygen_org}")"
+        keygen_index="$(org_index_by_slug "${keygen_slug}")" ||
+            die "unknown organization '${keygen_slug}'"
+        [ -n "${ORG_DEPLOY_SSH[$keygen_index]}" ] ||
+            die "organization '${keygen_slug}' has no deploy_ssh configured"
+        [ -n "${keygen_name}" ] || keygen_name="id_ed25519"
+        [[ "${keygen_name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
+            die "invalid key name '${keygen_name}'"
+        case "${keygen_name}" in
+            *.pub) die "invalid key name '${keygen_name}'" ;;
+        esac
+        command -v ssh-keygen >/dev/null 2>&1 ||
+            die "ssh-keygen is not installed; install openssh-client"
+        keygen_path="${ORG_DEPLOY_SSH[$keygen_index]}"
+        keygen_rel="${keygen_path#"${ROOT}/"}"
+        seed_deploy_folder "${keygen_path}" "${keygen_rel}" ||
+            die "${keygen_rel} changed since validation; refusing to write into it"
+        keygen_key="${keygen_path}/keys/${keygen_name}"
+        if [ "${keygen_force}" != "1" ]; then
+            if [ -e "${keygen_key}" ] || [ -e "${keygen_key}.pub" ]; then
+                die "deploy key '${keygen_name}' already exists in ${keygen_rel}/keys; pass --force to overwrite"
+            fi
+        fi
+        if [ "${keygen_force}" = "1" ]; then
+            rm -f "${keygen_key}" "${keygen_key}.pub"
+        fi
+        if [ "${keygen_rsa}" = "1" ]; then
+            ssh-keygen -q -t rsa -b 4096 -N '' -C "build-server ${keygen_slug} deploy key" \
+                -f "${keygen_key}"
+        else
+            ssh-keygen -q -t ed25519 -N '' -C "build-server ${keygen_slug} deploy key" \
+                -f "${keygen_key}"
+        fi
+        chmod 600 "${keygen_key}"
+        echo "fleet: created ${keygen_rel}/keys/${keygen_name}"
+        echo
+        echo "Public key (append it to the deploy user's authorized_keys on the target):"
+        cat "${keygen_key}.pub"
+        echo
+        echo "Suggested config entry for ${keygen_rel}/config:"
+        echo
+        cat <<EOF
+Host app-prod
+    HostName <target-host>
+    User deploy
+    IdentityFile ~/.ssh/deploy.d/keys/${keygen_name}
+    UserKnownHostsFile ~/.ssh/deploy.d/known_hosts
+    StrictHostKeyChecking yes
+EOF
+        echo
+        echo "Next steps:"
+        echo "  1. Append the public key to ~/.ssh/authorized_keys on the target."
+        echo "  2. Restart the runner to apply the material:  ./fleet.sh restart"
+        echo "  3. Verify connectivity from the runner:  ./fleet.sh check-ssh ${keygen_slug}"
         ;;
     "" )
         usage

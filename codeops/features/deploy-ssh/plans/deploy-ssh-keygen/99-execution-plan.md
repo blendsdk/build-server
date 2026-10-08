@@ -1,7 +1,7 @@
 # Task T-02: Deploy SSH starter files and key generation
 
 > **Type**: Task (lightweight) · **Feature**: deploy-ssh · **CodeOps Artifact Schema**: 1
-> **Progress**: 2/6 tasks (33%)
+> **Progress**: 3/6 tasks (50%)
 > **Reasoning**: medium — bounded CLI addition and starter-file seeding in existing, well-tested code
 > **Phase baseline tree**: 8d1fd6914e2fb74d4d010f9771360630ac1d715c
 > **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `test/fleet.impl.test.sh`, `docs/guide/deploy-ssh.md`, `docs/guide/cli.md`, `docs/reference/files.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/deploy-ssh/00-roadmap.md`, `codeops/00-roadmap.md`)
@@ -123,11 +123,12 @@ implementation tests use the real `ssh-keygen`.
 - [x] T-02.2 Run the fleet spec suite and record the red-phase results (seeding and `keygen` cases
   fail; untouched cases stay green) ✅ (completed: 2026-10-08 09:10 — 33 existing sections green,
   then FAIL at ST-48 as expected)
-- [~] T-02.3 Implement starter-file seeding in `fleet.sh`: a per-folder helper shared by
+- [x] T-02.3 Implement starter-file seeding in `fleet.sh`: a per-folder helper shared by
   `ensure_deploy_dirs` and `keygen` (change guard, 0700 modes, template heredoc, empty
-  `known_hosts`, new notice) ⏳ (implemented: 2026-10-08 09:11)
-- [ ] T-02.4 Implement the `keygen` subcommand (argument parsing, validation, `--rsa`/`--force`,
-  `ssh-keygen` invocation, paste-ready output) and its usage line
+  `known_hosts`, new notice) ✅ (completed: 2026-10-08 09:11 — ST-48..ST-50 green; the spec suite
+  advances to the keygen cases; impl suite green)
+- [~] T-02.4 Implement the `keygen` subcommand (argument parsing, validation, `--rsa`/`--force`,
+  `ssh-keygen` invocation, paste-ready output) and its usage line ⏳ (implemented: 2026-10-08 09:12)
 - [ ] T-02.5 Extend `test/fleet.impl.test.sh` (real `ssh-keygen`: private key is valid, `.pub`
   matches, mode 0600; repeated provisioning is byte-idempotent; `--force` replaces the pair) and
   run green
