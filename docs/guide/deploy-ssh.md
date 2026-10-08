@@ -38,9 +38,13 @@ deploy-ssh/acmetools/
 └── keys/           # private keys referenced by IdentityFile
 ```
 
+The first container-starting command seeds a missing folder: `keys/` at `0700`, a fully commented
+starter `config` with direct and bastion examples, and an empty `known_hosts`. Existing files are
+never overwritten, so editing the starter and re-running the command is always safe.
+
 - Keep the folder `0700` and the keys `0600` on the host.
-- `config` is optional, but a folder without it gets no `Include` line — a keys-only folder is
-  valid.
+- The seeded `config` is a starting point: uncomment one example and edit it. A folder without a
+  `config` gets no `Include` line — a keys-only folder stays valid.
 - The whole `deploy-ssh/` tree is gitignored and excluded from Docker build contexts. Never commit
   keys.
 
@@ -59,7 +63,7 @@ Rules:
 | Relative path | Must not start with `/` |
 | Inside `deploy-ssh/` | Must be a strict subdirectory such as `deploy-ssh/<slug>`; bare `deploy-ssh` is rejected |
 | Safe characters | No `..`, `*`, `?`, `[`, `:`, `$`, and the resolved path must stay inside the repository |
-| Auto-created | When missing, a container-starting command creates the folder and `keys/` at `0700` and prints a notice |
+| Auto-created | When missing, a container-starting command creates the folder and seeds `keys/`, a starter `config`, and an empty `known_hosts`; existing files are never overwritten |
 
 See [Organizations](/guide/organizations) for the full field list. `generate` and `status` never
 create folders; `up`, `restart`, `start`, `update`, `update-runners`, and `upgrade-all` do. Host
@@ -67,8 +71,9 @@ folders are never deleted, even when the option is removed.
 
 ## The config template
 
-Write the `config` file as ordinary OpenSSH client configuration. Use the absolute container paths
-shown below: the file is staged at `~/.ssh/deploy.d/`.
+A new folder already contains a commented starter — uncomment and edit the block you need. Write
+the `config` file as ordinary OpenSSH client configuration. Use the absolute container paths shown
+below: the file is staged at `~/.ssh/deploy.d/`.
 
 ```
 # Target hosts (private; reachable only through the bastion)
@@ -102,6 +107,30 @@ Notes:
   `IdentityFile`.
 - Keys must be keyed to the name SSH verifies. When you set `HostKeyAlias`, key the entry to that
   alias.
+
+## Generate a key pair
+
+Create a dedicated key pair for the folder with `keygen`:
+
+```bash
+./fleet.sh keygen AcmeTools            # keys/id_ed25519
+./fleet.sh keygen AcmeTools prod       # keys/prod
+./fleet.sh keygen AcmeTools prod --rsa # 4096-bit RSA instead of ed25519
+```
+
+The command seeds the folder's starter files first when needed, writes the pair under
+`deploy-ssh/<slug>/keys/` (private key `0600`), and prints the public key, a paste-ready `Host`
+stanza, and the next steps. Keys are generated without a passphrase on purpose: the runner has no
+SSH agent, so a passphrase would block every non-interactive job.
+
+An existing key is never replaced unless you pass `--force`. With several targets, give each key
+its own name and point the matching `IdentityFile` at it.
+
+After creating the key:
+
+1. Append the printed public key line to the target user's `~/.ssh/authorized_keys`.
+2. Edit `deploy-ssh/<slug>/config` (uncomment the stanza and set the real hostname).
+3. `./fleet.sh restart` so the runner stages the new material, then `./fleet.sh check-ssh <org>`.
 
 ## Collect and pin host keys
 
@@ -159,6 +188,7 @@ verification.
 | Action | Command |
 | --- | --- |
 | Apply a new or changed `deploy_ssh` declaration | `./fleet.sh up` |
+| Create a key pair | `./fleet.sh keygen <org> [name]` (see [Generate a key pair](#generate-a-key-pair)) |
 | Apply changed `config`, `known_hosts`, or `keys/` | `./fleet.sh restart` (or `stop` + `start`, or `update <org>`) |
 | Check connectivity | `./fleet.sh check-ssh <org>` |
 
@@ -242,8 +272,9 @@ of both organizations — see [Security](#security).
 
 ## Rotation and backups
 
-- **Rotate a key:** add the new key to `keys/`, point `IdentityFile` at it, restart the runner, then
-  remove the old key.
+- **Rotate a key:** create a new pair with `./fleet.sh keygen <org> <name>` (for example `prod2`),
+  append its public key on the target, point `IdentityFile` at it, restart the runner, then remove
+  the old key.
 - **A target's host key changed:** remove the old `known_hosts` line and add the new one. `--learn`
   prints a replacement instruction when it detects a changed key. Never keep both lines — SSH
   refuses a host that has two different keys.
@@ -255,8 +286,9 @@ of both organizations — see [Security](#security).
 CI cannot reach a real bastion, so verify a new setup by hand once:
 
 - [ ] Declare `deploy_ssh=deploy-ssh/<slug>` and run `./fleet.sh up`; the notice confirms the
-  folder was created.
-- [ ] Add `config`, `known_hosts`, and `keys/` (folder `0700`, keys `0600`).
+  folder and starter files were created.
+- [ ] Create a key pair with `./fleet.sh keygen <org>` and edit the seeded `config` (folder `0700`,
+  keys `0600`).
 - [ ] Pin the bastion key, then pin each target key with `deploy-ssh-check --learn <host>` through
   the bastion.
 - [ ] Restart the runner so the folder is staged.

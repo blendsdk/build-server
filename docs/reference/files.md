@@ -23,7 +23,7 @@
 | `.env` | Host secrets: `ACCESS_TOKEN`, `REGISTRY_HTTP_SECRET` |
 | `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json` | Host credentials baked into the image |
 | `ssh/` | Staged by `fleet.sh build` from `~/.ssh` |
-| `deploy-ssh/` | Host folder with deploy SSH material (`config`, `known_hosts`, `keys/`) mounted read-only into declaring runners (gitignored) — see [Deploy over SSH](/guide/deploy-ssh) |
+| `deploy-ssh/` | Host folder with deploy SSH material (`config`, `known_hosts`, `keys/`) mounted read-only into declaring runners; the CLI seeds a starter `config` and an empty `known_hosts` (gitignored) — see [Deploy over SSH](/guide/deploy-ssh) |
 | `examples/` | Offline playground with stub `docker`/`curl` (development only) |
 | `test/` | Specification and implementation tests, `smoke-workflow.yml`, `verify.sh` (development only) |
 | `docs/` | This VitePress site (development only) |
