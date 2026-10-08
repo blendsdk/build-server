@@ -13,6 +13,7 @@ docker-compose.generated.yml*
 .runner-version
 .fleet-build
 deploy-ssh
+exchange
 *.md
 LICENSE
 CONTRIBUTING.md

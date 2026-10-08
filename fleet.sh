@@ -393,7 +393,9 @@ seed_exchange_folder() {
         return 0
     fi
     if [ ! -d "${ROOT}/exchange" ]; then
-        mkdir "${ROOT}/exchange" || die "could not create exchange/"
+        # A fixed mode keeps the parent deterministic: build commands set a stricter umask that
+        # they never restore, and every host account needs to traverse to the 0777 folder.
+        (umask 022 && mkdir "${ROOT}/exchange") || die "could not create exchange/"
     fi
     (umask 000 && mkdir "${path}") || die "could not create ${rel}"
     echo "fleet: created ${rel} (shared artifact exchange, mode 0777)"
@@ -808,6 +810,9 @@ case "${COMMAND}" in
         parse_config
         render_compose
         confirm_destructive upgrade-all "${2:-}"
+        # Validate the exchange folders before any destructive work: a broken entry must stop the
+        # upgrade before the fleet is torn down or rebuilt.
+        ensure_exchange_dirs
         # Fetch before tearing anything down: an API failure must leave the fleet untouched.
         version="$(fetch_latest_version)"
         remove_legacy_containers
@@ -815,7 +820,6 @@ case "${COMMAND}" in
         purge_fleet
         rebuild_all "${version}"
         ensure_deploy_dirs
-        ensure_exchange_dirs
         compose up -d
         prune_after_build
         echo "fleet: upgrade to runner ${version} complete"
@@ -854,9 +858,11 @@ case "${COMMAND}" in
         render_compose
         require_images
         remove_legacy_containers
+        # Validate the exchange folders before any compose call: a broken entry must stop the
+        # restart before the fleet is torn down.
+        ensure_exchange_dirs
         compose down --remove-orphans
         ensure_deploy_dirs
-        ensure_exchange_dirs
         compose up -d
         ;;
     status)

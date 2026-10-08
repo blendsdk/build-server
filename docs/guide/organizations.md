@@ -53,8 +53,9 @@ with mode `0777`; an existing folder is never modified. `generate`, `status`, `d
 directory (for example a stray file) stops the command with a clear message before any container
 starts.
 
-Treat the folder as a shared zone inside the organization: every job of the organization can read,
-replace, or delete its contents, so do not store secrets there.
+Treat the folder as a shared zone: every local account on the host — not only the organization's
+jobs — can read, replace, or delete its contents, and nested containers may create files owned by
+root or arbitrary user IDs. Do not store secrets there.
 
 ## Adding and removing organizations
 

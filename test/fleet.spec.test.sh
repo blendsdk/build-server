@@ -1114,4 +1114,103 @@ grep -qF 'exchange/alpha exists but is not a directory' "${S}/out" ||
 grep -q 'up -d' "${S}/trace" && fail "the fleet must not start with a broken exchange folder"
 echo "PASS: a non-directory exchange entry fails before the fleet starts"
 
+# --- restart and upgrade-all fail before any compose call on a broken entry --------------------
+# ST-67: a non-directory exchange entry must stop restart and upgrade-all before they tear
+# anything down (no compose call, no release fetch).
+S="${T}/exchange-fail-early"
+new_sandbox "${S}"
+mkdir -p "${S}/exchange"
+printf 'not a folder\n' > "${S}/exchange/alpha"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" restart >"${S}/out" 2>&1
+RESTART_CODE=$?
+set -e
+[ "${RESTART_CODE}" -ne 0 ] || fail "restart must fail on a non-directory exchange entry"
+grep -qF 'exchange/alpha exists but is not a directory' "${S}/out" ||
+    fail "restart must explain the non-directory entry"
+grep -qE 'down --remove-orphans|up -d' "${S}/trace" &&
+    fail "restart must not touch the fleet before validating the exchange folder"
+: > "${S}/trace"
+set +e
+CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" upgrade-all --yes >"${S}/out" 2>&1
+UPGRADE_CODE=$?
+set -e
+[ "${UPGRADE_CODE}" -ne 0 ] || fail "upgrade-all must fail on a non-directory exchange entry"
+grep -qF 'exchange/alpha exists but is not a directory' "${S}/out" ||
+    fail "upgrade-all must explain the non-directory entry"
+grep -q 'actions/runner/releases/latest' "${S}/trace" &&
+    fail "upgrade-all must not fetch the release before validating the exchange folder"
+grep -qE 'down --remove-orphans|builder prune' "${S}/trace" &&
+    fail "upgrade-all must not tear down the fleet before validating the exchange folder"
+echo "PASS: restart and upgrade-all fail before any compose call on a broken entry"
+
+# --- every runner-starting command creates the exchange folder ---------------------------------
+# ST-68: update, update-runners, upgrade-all, and restart must also create a missing exchange
+# folder with mode 0777 and the notice (up and start are covered above).
+S="${T}/exchange-all-commands"
+new_sandbox "${S}"
+for cmd in "update Alpha" "update-runners" "upgrade-all --yes" "restart"; do
+    read -r -a cmd_args <<<"${cmd}"
+    rm -rf "${S}/exchange"
+    : > "${S}/trace"
+    CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" "${cmd_args[@]}" >"${S}/out" 2>&1 || {
+        cat "${S}/out" >&2
+        fail "'${cmd}' should create the missing exchange folder and continue"
+    }
+    [ -d "${S}/exchange/alpha" ] || fail "'${cmd}' must create exchange/alpha"
+    [ "$(stat -c '%a' "${S}/exchange/alpha")" = "777" ] ||
+        fail "'${cmd}' must create exchange/alpha with 0777"
+    grep -qF 'fleet: created exchange/alpha' "${S}/out" ||
+        fail "'${cmd}' must announce the created exchange folder"
+done
+echo "PASS: update, update-runners, upgrade-all, and restart create the exchange folder"
+
+# --- exchange folder symlink and parent-mode rules --------------------------------------------
+# ST-69: a symlink that resolves to a directory is accepted and never modified; a dangling
+# symlink fails before the fleet starts; the parent exchange/ directory is created with a fixed
+# 0755 mode even after build commands leak a stricter umask.
+S="${T}/exchange-symlink"
+new_sandbox "${S}"
+mkdir -p "${S}/exchange-real"
+printf 'artifact\n' > "${S}/exchange-real/keep.txt"
+chmod 700 "${S}/exchange-real"
+mkdir -p "${S}/exchange"
+ln -s "${S}/exchange-real" "${S}/exchange/alpha"
+: > "${S}/trace"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up must accept a symlink that resolves to a directory"
+}
+[ -L "${S}/exchange/alpha" ] || fail "the accepted symlink must stay a symlink"
+[ "$(stat -c '%a' "${S}/exchange-real")" = "700" ] ||
+    fail "the symlink target must keep its mode"
+[ "$(cat "${S}/exchange-real/keep.txt")" = "artifact" ] ||
+    fail "the symlink target must be untouched"
+grep -qF 'fleet: created exchange/alpha' "${S}/out" &&
+    fail "no creation notice may print for an accepted symlink"
+
+rm -rf "${S}/exchange"
+: > "${S}/trace"
+CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" update-runners >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "update-runners should create the exchange folder and continue"
+}
+[ "$(stat -c '%a' "${S}/exchange")" = "755" ] ||
+    fail "the exchange parent must be created with a fixed 0755 mode"
+
+rm -rf "${S}/exchange"
+mkdir -p "${S}/exchange"
+ln -s "${S}/missing-target" "${S}/exchange/alpha"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" up >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "up must fail on a dangling exchange symlink"
+grep -qF 'exchange/alpha exists but is not a directory' "${S}/out" ||
+    fail "the dangling symlink must fail with the non-directory message"
+grep -q 'up -d' "${S}/trace" && fail "the fleet must not start with a dangling exchange symlink"
+echo "PASS: exchange symlink handling and parent mode hold"
+
 echo "fleet spec tests: PASS"

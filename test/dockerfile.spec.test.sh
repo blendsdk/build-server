@@ -71,4 +71,12 @@ grep -Eq '^[[:space:]]*/deploy-ssh/[[:space:]]*$' "${GITIGNORE}" ||
 grep -Eq '^[[:space:]]*deploy-ssh[[:space:]]*$' "${DOCKERIGNORE}" ||
     fail ".dockerignore must exclude deploy-ssh so keys are never sent as build context"
 
+# The shared exchange folder holds arbitrary job artifacts (and is world-writable): keep it out
+# of the build context, and out of commits, like the deploy material above.
+grep -Eq '^[[:space:]]*/exchange/[[:space:]]*$' "${GITIGNORE}" ||
+    fail ".gitignore must exclude the exchange/ directory so job artifacts are never committed"
+
+grep -Eq '^[[:space:]]*exchange[[:space:]]*$' "${DOCKERIGNORE}" ||
+    fail ".dockerignore must exclude exchange so job artifacts are never sent as build context"
+
 echo "Dockerfile spec tests: PASS"

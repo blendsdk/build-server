@@ -4,7 +4,7 @@
 > **Progress**: 4/4 tasks (100%)
 > **Reasoning**: medium — user-facing fleet behavior; a world-writable host folder is mounted into privileged runner containers, so the mount and seeding rules must stay predictable
 > **Phase baseline tree**: da6599d21f969b1cd754a1e6a24fe883e4215730
-> **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `test/orgs.spec.test.sh` (three existing compose-model cases become position-independent; one model-level exchange case is added), `.gitignore`, `docs/reference/files.md`, `docs/guide/organizations.md`, `docs/guide/cli.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/_maintenance/00-roadmap.md`, `codeops/00-roadmap.md`)
+> **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `test/orgs.spec.test.sh` (three existing compose-model cases become position-independent; one model-level exchange case is added), `test/dockerfile.spec.test.sh`, `.gitignore`, `.dockerignore`, `docs/reference/files.md`, `docs/guide/organizations.md`, `docs/guide/cli.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/_maintenance/00-roadmap.md`, `codeops/00-roadmap.md`)
 > **Lenses**: correctness + security (world-writable host folder mounted read-write into privileged containers)
 
 ## Objective
@@ -34,7 +34,8 @@ ignore `/exchange/` in `.gitignore`. No `orgs.conf` option, no new command, no c
    before any compose call with a clear message.
 5. `generate`, `status`, `down`, `stop`, and `clean` never create the folder; `down`, `stop`, and
    `clean` never delete or modify it (it is operator data, not a compose volume).
-6. The parent `exchange/` directory is created with the normal host umask (not world-writable).
+6. The parent `exchange/` directory is created with a fixed 0755 mode (not world-writable),
+   independent of the caller's umask.
 7. Deploy-SSH behavior is unchanged.
 
 ### Specification test cases (in `test/fleet.spec.test.sh`, ST-62..ST-66)
@@ -47,6 +48,9 @@ ignore `/exchange/` in `.gitignore`. No `orgs.conf` option, no new command, no c
    `clean --yes` preserve it.
 4. ST-65: `generate`, `status`, `stop`, `down`, and `clean --yes` never create the folder.
 5. ST-66: a file at `exchange/<slug>` fails the command with the clear message and no compose call.
+6. Post-review regression cases: ST-67 (`restart`/`upgrade-all` stop before any compose call or
+   release fetch on a broken entry), ST-68 (all six runner-starting commands create the folder),
+   ST-69 (symlink handling and the deterministic parent mode).
 
 ## Tasks
 
