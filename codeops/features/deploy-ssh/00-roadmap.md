@@ -3,7 +3,7 @@
 > **Feature-Set**: Deploy SSH
 > **Status**: In Progress
 > **Created**: 2026-10-08
-> **Last Updated**: 2026-10-08 09:47
+> **Last Updated**: 2026-10-08 09:54
 > **Progress**: n/a
 > **CodeOps Artifact Schema**: 1
 
@@ -17,4 +17,4 @@
 |----|-------|----|------|-------|--------|--------------|----------------------|
 | T-01 | Deploy SSH material and connectivity check | — | [deploy-ssh](plans/deploy-ssh/99-execution-plan.md) | Done | ✅ | 2026-10-08 | — |
 | T-02 | Deploy SSH starter files and key generation | — | [deploy-ssh-keygen](plans/deploy-ssh-keygen/99-execution-plan.md) | Done | ✅ | 2026-10-08 | — |
-| T-03 | Pass extra arguments through check-ssh | — | [check-ssh-args](plans/check-ssh-args/99-execution-plan.md) | Executing | 🔄 | 2026-10-08 | — |
+| T-03 | Pass extra arguments through check-ssh | — | [check-ssh-args](plans/check-ssh-args/99-execution-plan.md) | Done | ✅ | 2026-10-08 | — |

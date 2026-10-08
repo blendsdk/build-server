@@ -54,6 +54,21 @@ STUB
     cp "${ROOT}/fleet.sh" "${dir}/fleet.sh"
 }
 
+# Replace a sandbox's docker stub with one that additionally records every argument on its own
+# line as argv[<value>], so tests can assert argument boundaries instead of only the joined line.
+stub_docker_argv() {
+    local dir="$1"
+    cat > "${dir}/bin/docker" <<'EOF'
+#!/bin/bash
+printf 'docker %s\n' "$*" >> "${TRACE}"
+for __argument in "$@"; do
+    printf 'argv[%s]\n' "${__argument}" >> "${TRACE}"
+done
+exit 0
+EOF
+    chmod +x "${dir}/bin/docker"
+}
+
 run_fleet() {
     local dir="$1"
     shift
@@ -928,12 +943,13 @@ grep -q 'could not create' "${S}/out" || fail "the failure must name the blocked
 grep -q 'docker compose' "${S}/trace" && fail "the fleet must not start after a seeding failure"
 echo "PASS: blocking a starter path fails the command"
 
-# --- check-ssh forwards extra arguments to the checker ------------------------------------------
-# ST-60: arguments after the organization must be passed verbatim so the checker's modes are
-# available through the short command (for example --learn).
+# --- check-ssh forwards extra arguments as separate argv entries --------------------------------
+# ST-60: arguments after the organization must be passed verbatim — separate argv entries, never a
+# joined or re-split shell string.
 S="${T}/check-ssh-args"
 new_sandbox "${S}"
 printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_docker_argv "${S}"
 : > "${S}/trace"
 run_fleet "${S}" check-ssh Alpha --learn app-prod >"${S}/out" 2>&1 || {
     cat "${S}/out" >&2
@@ -941,13 +957,29 @@ run_fleet "${S}" check-ssh Alpha --learn app-prod >"${S}/out" 2>&1 || {
 }
 grep -qF 'exec -u docker alpha deploy-ssh-check --learn app-prod' "${S}/trace" ||
     fail "extra arguments must be forwarded verbatim"
-echo "PASS: check-ssh forwards extra arguments"
+grep -qF 'argv[--learn]' "${S}/trace" || fail "--learn must arrive as its own argument"
+grep -qF 'argv[app-prod]' "${S}/trace" || fail "the host must arrive as its own argument"
+LEARN_LINE="$(grep -nF 'argv[--learn]' "${S}/trace" | cut -d: -f1)"
+HOST_LINE="$(grep -nF 'argv[app-prod]' "${S}/trace" | cut -d: -f1)"
+[ "${LEARN_LINE}" -lt "${HOST_LINE}" ] || fail "--learn must arrive before its host"
+run_fleet "${S}" check-ssh Alpha 'app worker-01' >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "check-ssh with a spaced argument should succeed"
+}
+grep -qF 'argv[app worker-01]' "${S}/trace" ||
+    fail "an argument with a space must stay one entry"
+grep -qF 'argv[app]' "${S}/trace" && fail "arguments must not be re-split"
+run_fleet "${S}" check-ssh Alpha >"${S}/out" 2>&1 || fail "check-ssh without extras should succeed"
+grep -qF 'argv[]' "${S}/trace" && fail "no empty argument may be appended"
+grep -qF 'argv[deploy-ssh-check]' "${S}/trace" || fail "the checker command must still be forwarded"
+echo "PASS: check-ssh forwards extra arguments as separate argv entries"
 
-# --- check-ssh forwards a host list -------------------------------------------------------------
+# --- check-ssh forwards a host list in order ----------------------------------------------------
 # ST-61: several hosts are passed as separate arguments, preserving their order.
 S="${T}/check-ssh-hosts"
 new_sandbox "${S}"
 printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_docker_argv "${S}"
 : > "${S}/trace"
 run_fleet "${S}" check-ssh Alpha app-worker-01 app-worker-02 >"${S}/out" 2>&1 || {
     cat "${S}/out" >&2
@@ -955,6 +987,11 @@ run_fleet "${S}" check-ssh Alpha app-worker-01 app-worker-02 >"${S}/out" 2>&1 ||
 }
 grep -qF 'exec -u docker alpha deploy-ssh-check app-worker-01 app-worker-02' "${S}/trace" ||
     fail "the host list must be forwarded in order"
-echo "PASS: check-ssh forwards a host list"
+FIRST_LINE="$(grep -nF 'argv[app-worker-01]' "${S}/trace" | cut -d: -f1)"
+SECOND_LINE="$(grep -nF 'argv[app-worker-02]' "${S}/trace" | cut -d: -f1)"
+[ -n "${FIRST_LINE}" ] || fail "the first host must arrive as its own argument"
+[ -n "${SECOND_LINE}" ] || fail "the second host must arrive as its own argument"
+[ "${FIRST_LINE}" -lt "${SECOND_LINE}" ] || fail "the host order must be preserved"
+echo "PASS: check-ssh forwards a host list in order"
 
 echo "fleet spec tests: PASS"

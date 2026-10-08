@@ -52,7 +52,7 @@ Usage: fleet.sh <command> [args]
   clean [--yes]            Remove this installation's unused images and the host build cache
   upgrade-all [--yes]      Full teardown, cleanup, rebuild with the latest runner, and restart
   status                   Show the fleet and container state
-  check-ssh <org> [args...] Run the deploy SSH connectivity check in one organization's runner
+  check-ssh <org> [args]   Run the deploy SSH connectivity check in one organization's runner
   keygen <org> [name]      Create a deploy key pair for one organization (ed25519; --rsa, --force)
 EOF
 }
@@ -838,7 +838,7 @@ case "${COMMAND}" in
     check-ssh)
         parse_config
         render_compose
-        [ "${#}" -ge 2 ] || die "usage: fleet.sh check-ssh <org> [args...]"
+        [ "${#}" -ge 2 ] || die "usage: fleet.sh check-ssh <org> [args]"
         check_ssh_slug="$(slugify "${2}")"
         check_ssh_index="$(org_index_by_slug "${check_ssh_slug}")" ||
             die "unknown organization '${check_ssh_slug}'"
