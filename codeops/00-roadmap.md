@@ -1,7 +1,7 @@
 # Portfolio Roadmap: build-server
 
 > **Status**: Active
-> **Last Updated**: 2026-10-03
+> **Last Updated**: 2026-10-08 09:02
 > **Features**: 0 / 0 done
 > **CodeOps Artifact Schema**: 1
 
@@ -13,7 +13,8 @@
 
 | Feature | Roadmap | Stage Summary | Progress | Status | Last Updated |
 |---------|---------|---------------|----------|--------|--------------|
-| — | — | — | — | — | — |
+| deploy-ssh | [→](features/deploy-ssh/00-roadmap.md) | plan done · 1 task planned | n/a | 🔄 | 2026-10-08 |
+| _maintenance | [→](features/_maintenance/00-roadmap.md) | 14 tasks · all done | n/a | ✅ | 2026-10-06 |
 
 ## Archived
 
