@@ -928,4 +928,33 @@ grep -q 'could not create' "${S}/out" || fail "the failure must name the blocked
 grep -q 'docker compose' "${S}/trace" && fail "the fleet must not start after a seeding failure"
 echo "PASS: blocking a starter path fails the command"
 
+# --- check-ssh forwards extra arguments to the checker ------------------------------------------
+# ST-60: arguments after the organization must be passed verbatim so the checker's modes are
+# available through the short command (for example --learn).
+S="${T}/check-ssh-args"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" check-ssh Alpha --learn app-prod >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "check-ssh with extra arguments should succeed"
+}
+grep -qF 'exec -u docker alpha deploy-ssh-check --learn app-prod' "${S}/trace" ||
+    fail "extra arguments must be forwarded verbatim"
+echo "PASS: check-ssh forwards extra arguments"
+
+# --- check-ssh forwards a host list -------------------------------------------------------------
+# ST-61: several hosts are passed as separate arguments, preserving their order.
+S="${T}/check-ssh-hosts"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" check-ssh Alpha app-worker-01 app-worker-02 >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "check-ssh with a host list should succeed"
+}
+grep -qF 'exec -u docker alpha deploy-ssh-check app-worker-01 app-worker-02' "${S}/trace" ||
+    fail "the host list must be forwarded in order"
+echo "PASS: check-ssh forwards a host list"
+
 echo "fleet spec tests: PASS"

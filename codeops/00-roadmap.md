@@ -13,7 +13,7 @@
 
 | Feature | Roadmap | Stage Summary | Progress | Status | Last Updated |
 |---------|---------|---------------|----------|--------|--------------|
-| deploy-ssh | [→](features/deploy-ssh/00-roadmap.md) | plan done · keygen task done | n/a | ✅ | 2026-10-08 |
+| deploy-ssh | [→](features/deploy-ssh/00-roadmap.md) | keygen done · check-ssh args executing | n/a | 🔄 | 2026-10-08 |
 | _maintenance | [→](features/_maintenance/00-roadmap.md) | 14 tasks · all done | n/a | ✅ | 2026-10-06 |
 
 ## Archived
