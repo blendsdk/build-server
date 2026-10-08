@@ -1,7 +1,7 @@
 # Task T-15: Shared artifact exchange folder
 
 > **Type**: Task (lightweight) · **Feature**: _maintenance · **CodeOps Artifact Schema**: 1
-> **Progress**: 1/4 tasks (25%)
+> **Progress**: 2/4 tasks (50%)
 > **Reasoning**: medium — user-facing fleet behavior; a world-writable host folder is mounted into privileged runner containers, so the mount and seeding rules must stay predictable
 > **Phase baseline tree**: da6599d21f969b1cd754a1e6a24fe883e4215730
 > **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `.gitignore`, `docs/reference/files.md`, `docs/guide/organizations.md`, `docs/guide/cli.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/_maintenance/00-roadmap.md`, `codeops/00-roadmap.md`)
@@ -51,8 +51,9 @@ ignore `/exchange/` in `.gitignore`. No `orgs.conf` option, no new command, no c
 ## Tasks
 
 - [x] T-15.1 Add ST-62..ST-66 to `test/fleet.spec.test.sh` (and update the file's coverage comment) ✅ (completed: 2026-10-08 16:16)
-- [ ] T-15.2 Run the fleet spec suite and record the red phase (the new cases fail; existing cases
-  stay green)
+- [x] T-15.2 Run the fleet spec suite and record the red phase (the new cases fail; existing cases
+  stay green) ✅ (completed: 2026-10-08 16:17 — 47 existing sections green, then FAIL at ST-62 as
+  expected)
 - [ ] T-15.3 Implement: the exchange bind mount in `render_compose()`, `seed_exchange_folder()` +
   `ensure_exchange_dirs()` wired to the six runner-starting call sites, `/exchange/` in `.gitignore`
 - [ ] T-15.4 Update the docs (`docs/reference/files.md`, `docs/guide/organizations.md`,
