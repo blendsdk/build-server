@@ -52,7 +52,7 @@ Usage: fleet.sh <command> [args]
   clean [--yes]            Remove this installation's unused images and the host build cache
   upgrade-all [--yes]      Full teardown, cleanup, rebuild with the latest runner, and restart
   status                   Show the fleet and container state
-  check-ssh <org>          Run the deploy SSH connectivity check in one organization's runner
+  check-ssh <org> [args...] Run the deploy SSH connectivity check in one organization's runner
   keygen <org> [name]      Create a deploy key pair for one organization (ed25519; --rsa, --force)
 EOF
 }
@@ -832,17 +832,19 @@ case "${COMMAND}" in
         print_fleet
         compose ps
         ;;
+    # check-ssh: run the deploy checker in one organization's runner. Extra arguments are forwarded
+    # verbatim (as argv, never through a shell) so the checker's own modes — --learn, explicit host
+    # lists — work through this short form.
     check-ssh)
         parse_config
         render_compose
-        [ "${#}" -ge 2 ] || die "usage: fleet.sh check-ssh <org>"
-        [ "${#}" -le 2 ] || die "usage: fleet.sh check-ssh <org>"
+        [ "${#}" -ge 2 ] || die "usage: fleet.sh check-ssh <org> [args...]"
         check_ssh_slug="$(slugify "${2}")"
         check_ssh_index="$(org_index_by_slug "${check_ssh_slug}")" ||
             die "unknown organization '${check_ssh_slug}'"
         [ -n "${ORG_DEPLOY_SSH[$check_ssh_index]}" ] ||
             die "organization '${check_ssh_slug}' has no deploy_ssh configured"
-        compose exec -u docker "${check_ssh_slug}" deploy-ssh-check
+        compose exec -u docker "${check_ssh_slug}" deploy-ssh-check "${@:3}"
         ;;
     # Create a deploy key pair for one organization. The folder is seeded like a container-starting
     # command seeds it; an existing pair is protected unless --force is passed. No passphrase is set
