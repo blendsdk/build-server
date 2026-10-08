@@ -1,8 +1,11 @@
-# Task T-01: Deploy SSH starter files and key generation
+# Task T-02: Deploy SSH starter files and key generation
 
 > **Type**: Task (lightweight) · **Feature**: deploy-ssh · **CodeOps Artifact Schema**: 1
 > **Progress**: 0/6 tasks (0%)
 > **Reasoning**: medium — bounded CLI addition and starter-file seeding in existing, well-tested code
+> **Phase baseline tree**: 8d1fd6914e2fb74d4d010f9771360630ac1d715c
+> **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `test/fleet.impl.test.sh`, `docs/guide/deploy-ssh.md`, `docs/guide/cli.md`, `docs/reference/files.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/deploy-ssh/00-roadmap.md`, `codeops/00-roadmap.md`)
+> **Lenses**: security
 
 ## Objective
 
@@ -115,19 +118,19 @@ implementation tests use the real `ssh-keygen`.
 
 ## Tasks
 
-- [ ] T-01.1 Extend `test/fleet.spec.test.sh` with ST-48..ST-56 and adjust any full-message notice
-  expectations (`created <rel>` substring assertions stay valid)
-- [ ] T-01.2 Run the fleet spec suite and record the red-phase results (seeding and `keygen` cases
+- [~] T-02.1 Extend `test/fleet.spec.test.sh` with ST-48..ST-56 and adjust any full-message notice
+  expectations (`created <rel>` substring assertions stay valid) ⏳ (implemented: 2026-10-08 09:10)
+- [ ] T-02.2 Run the fleet spec suite and record the red-phase results (seeding and `keygen` cases
   fail; untouched cases stay green)
-- [ ] T-01.3 Implement starter-file seeding in `fleet.sh`: a per-folder helper shared by
+- [ ] T-02.3 Implement starter-file seeding in `fleet.sh`: a per-folder helper shared by
   `ensure_deploy_dirs` and `keygen` (change guard, 0700 modes, template heredoc, empty
   `known_hosts`, new notice)
-- [ ] T-01.4 Implement the `keygen` subcommand (argument parsing, validation, `--rsa`/`--force`,
+- [ ] T-02.4 Implement the `keygen` subcommand (argument parsing, validation, `--rsa`/`--force`,
   `ssh-keygen` invocation, paste-ready output) and its usage line
-- [ ] T-01.5 Extend `test/fleet.impl.test.sh` (real `ssh-keygen`: private key is valid, `.pub`
+- [ ] T-02.5 Extend `test/fleet.impl.test.sh` (real `ssh-keygen`: private key is valid, `.pub`
   matches, mode 0600; repeated provisioning is byte-idempotent; `--force` replaces the pair) and
   run green
-- [ ] T-01.6 Update docs (`docs/guide/deploy-ssh.md`, `docs/guide/cli.md`,
+- [ ] T-02.6 Update docs (`docs/guide/deploy-ssh.md`, `docs/guide/cli.md`,
   `docs/reference/files.md`) and run the full verification
 
 **Verify**: `bash test/verify.sh`; because docs change, also `npm ci && npm run docs:build`

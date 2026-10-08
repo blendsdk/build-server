@@ -1,8 +1,9 @@
 #!/bin/bash
-# Specification tests for the fleet CLI build, update, and lifecycle commands.
+# Specification tests for the fleet CLI build, update, lifecycle, and deploy-ssh key commands.
 #
 # Every external command is stubbed on PATH and records its arguments; the tests assert the exact
-# sequence and arguments the CLI must produce, plus the staging and version-state rules.
+# sequence and arguments the CLI must produce, plus the staging, version-state, deploy-folder
+# seeding, and key generation rules.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +15,8 @@ fail() {
     exit 1
 }
 
-# Build a sandbox root with a stub docker, curl, and a fake home holding SSH material.
+# Build a sandbox root with stub docker, curl, and ssh-keygen binaries and a fake home holding
+# SSH material.
 new_sandbox() {
     local dir="$1"
     mkdir -p "${dir}/bin" "${dir}/home/.ssh" "${dir}/orgs/beta"
@@ -27,7 +29,24 @@ new_sandbox() {
     # shellcheck disable=SC2016  # the placeholder text must stay literal in the generated stub
     printf '#!/bin/bash\nprintf "curl %%s\\n" "$*" >> "${TRACE}"\ncase "$*" in\n    *"-X DELETE"*) code="${DELETE_HTTP_CODE:-204}" ;;\n    *) code="${CURL_HTTP_CODE:-200}" ;;\nesac\ncase "$*" in\n    *"-o /dev/null"*) printf "%%s" "${code}" ;;\n    *) printf "%%s\\n%%s" "${CURL_BODY:-}" "${code}" ;;\nesac\nexit "${CURL_EXIT:-0}"\n' \
         > "${dir}/bin/curl"
-    chmod +x "${dir}/bin/docker" "${dir}/bin/curl"
+    cat > "${dir}/bin/ssh-keygen" <<'STUB'
+#!/bin/bash
+# Test stub: record the invocation, then drop a canned key pair at the -f path.
+printf 'ssh-keygen %s\n' "$*" >> "${TRACE}"
+key=""
+previous=""
+for argument in "$@"; do
+    case "${previous}" in
+        -f) key="${argument}" ;;
+        -N) printf 'passphrase=<%s>\n' "${argument}" >> "${TRACE}" ;;
+    esac
+    previous="${argument}"
+done
+[ -n "${key}" ] || exit 1
+printf 'PRIVATE KEY\n' > "${key}"
+printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIStubOnlyKeyForTests stub@test\n' > "${key}.pub"
+STUB
+    chmod +x "${dir}/bin/docker" "${dir}/bin/curl" "${dir}/bin/ssh-keygen"
     printf 'key' > "${dir}/home/.ssh/id_rsa"
     printf 'pub' > "${dir}/home/.ssh/id_rsa.pub"
     printf 'Host *\n' > "${dir}/home/.ssh/config"
@@ -625,5 +644,235 @@ grep -qF "organization 'alpha' has no deploy_ssh configured" "${S}/out" ||
 grep -qF 'compose exec' "${S}/trace" &&
     fail "check-ssh must not call compose exec without deploy_ssh"
 echo "PASS: check-ssh fails fast when the organization has no deploy_ssh"
+
+# --- up seeds starter files into a created deploy folder --------------------------------------
+# ST-48: creating a declared deploy folder must also seed a commented starter config, an empty
+# known_hosts, and keys/, with restricted modes; the notice must say the starter files are ready.
+S="${T}/deploy-ssh-seed"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" up >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "up should seed the deploy folder and continue"
+}
+[ -f "${S}/deploy-ssh/alpha/config" ] || fail "up must seed the starter config"
+[ -f "${S}/deploy-ssh/alpha/known_hosts" ] || fail "up must seed known_hosts"
+[ -d "${S}/deploy-ssh/alpha/keys" ] || fail "up must create keys/"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha/config")" = "600" ] ||
+    fail "the starter config must be 0600"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha/known_hosts")" = "600" ] ||
+    fail "the seeded known_hosts must be 0600"
+[ ! -s "${S}/deploy-ssh/alpha/known_hosts" ] || fail "the seeded known_hosts must be empty"
+grep -q 'created deploy-ssh/alpha with starter files' "${S}/out" ||
+    fail "the creation notice must mention the starter files"
+if grep -vE '^[[:space:]]*(#|$)' "${S}/deploy-ssh/alpha/config" >/dev/null; then
+    fail "the starter config must be fully commented"
+fi
+for expected in 'Host app-prod' 'ProxyJump deploy@bastion.example.com' 'Host bastion.example.com' \
+    'IdentityFile ~/.ssh/deploy.d/keys/id_ed25519' 'UserKnownHostsFile ~/.ssh/deploy.d/known_hosts'; do
+    grep -qF "${expected}" "${S}/deploy-ssh/alpha/config" ||
+        fail "the starter config must contain '${expected}'"
+done
+echo "PASS: up seeds a commented starter config, empty known_hosts, and keys/"
+
+# --- provisioning never overwrites operator material ------------------------------------------
+# ST-49: existing config, known_hosts, and keys must survive provisioning byte-for-byte, and an
+# existing folder must not print the creation notice.
+S="${T}/deploy-ssh-never-overwrite"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha/keys"
+printf '# custom config\nHost keep\n' > "${S}/deploy-ssh/alpha/config"
+printf 'keep.example.com ssh-ed25519 AAAA\n' > "${S}/deploy-ssh/alpha/known_hosts"
+printf 'private material\n' > "${S}/deploy-ssh/alpha/keys/id_ed25519"
+cp "${S}/deploy-ssh/alpha/config" "${S}/config.before"
+cp "${S}/deploy-ssh/alpha/known_hosts" "${S}/known_hosts.before"
+cp "${S}/deploy-ssh/alpha/keys/id_ed25519" "${S}/key.before"
+run_fleet "${S}" up >"${S}/out" 2>&1 || fail "up must succeed with existing deploy material"
+cmp -s "${S}/config.before" "${S}/deploy-ssh/alpha/config" ||
+    fail "provisioning must never overwrite an existing config"
+cmp -s "${S}/known_hosts.before" "${S}/deploy-ssh/alpha/known_hosts" ||
+    fail "provisioning must never overwrite existing known_hosts"
+cmp -s "${S}/key.before" "${S}/deploy-ssh/alpha/keys/id_ed25519" ||
+    fail "provisioning must never overwrite existing keys"
+grep -q 'created deploy-ssh/alpha' "${S}/out" &&
+    fail "an existing folder must not print a creation notice"
+echo "PASS: provisioning never overwrites existing deploy material"
+
+# --- starter-file repair stays silent ----------------------------------------------------------
+# ST-50: a folder whose starter files were removed gets them back on the next provisioning run,
+# without the folder-creation notice (the notice marks folder creation only).
+S="${T}/deploy-ssh-repair"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha/keys"
+run_fleet "${S}" restart >"${S}/out" 2>&1 || fail "restart must repair the missing starter files"
+[ -f "${S}/deploy-ssh/alpha/config" ] || fail "repair must recreate the starter config"
+[ -f "${S}/deploy-ssh/alpha/known_hosts" ] || fail "repair must recreate known_hosts"
+grep -q 'created deploy-ssh/alpha' "${S}/out" && fail "a repair must not print the creation notice"
+echo "PASS: starter-file repair is silent"
+
+# --- keygen creates a passphrase-less ed25519 pair and prints guidance -------------------------
+# ST-51: the default run creates keys/id_ed25519, records the ssh-keygen arguments, and prints the
+# public key, a stanza using the container-side key path, and the next steps.
+S="${T}/keygen-default"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "keygen should succeed"
+}
+[ -f "${S}/deploy-ssh/alpha/keys/id_ed25519" ] || fail "keygen must create the private key"
+[ -f "${S}/deploy-ssh/alpha/keys/id_ed25519.pub" ] || fail "keygen must create the public key"
+KEYGEN_LINE="$(grep -F 'ssh-keygen' "${S}/trace" | head -1 || true)"
+case "${KEYGEN_LINE}" in
+    *'-t ed25519'*) ;;
+    *) fail "keygen must request an ed25519 key: ${KEYGEN_LINE}" ;;
+esac
+case "${KEYGEN_LINE}" in
+    *"-f ${S}/deploy-ssh/alpha/keys/id_ed25519"*) ;;
+    *) fail "keygen must target the deploy keys folder: ${KEYGEN_LINE}" ;;
+esac
+grep -qF 'passphrase=<>' "${S}/trace" || fail "keygen must not set a passphrase"
+grep -qF 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIStubOnlyKeyForTests' "${S}/out" ||
+    fail "the public key must be printed"
+grep -qF 'IdentityFile ~/.ssh/deploy.d/keys/id_ed25519' "${S}/out" ||
+    fail "the printed stanza must use the container-side key path"
+grep -q 'authorized_keys' "${S}/out" || fail "the output must mention authorized_keys"
+grep -qF './fleet.sh restart' "${S}/out" || fail "the output must tell the operator to restart"
+grep -qF './fleet.sh check-ssh alpha' "${S}/out" || fail "the output must point at check-ssh"
+grep -q 'created deploy-ssh/alpha/keys/id_ed25519' "${S}/out" ||
+    fail "the output must name the created key"
+echo "PASS: keygen creates an ed25519 pair and prints setup guidance"
+
+# --- keygen accepts a custom key name ----------------------------------------------------------
+# ST-52: a second argument names the pair.
+S="${T}/keygen-named"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" keygen Alpha prod >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "keygen with a custom name should succeed"
+}
+[ -f "${S}/deploy-ssh/alpha/keys/prod" ] || fail "keygen must create the named private key"
+[ -f "${S}/deploy-ssh/alpha/keys/prod.pub" ] || fail "keygen must create the named public key"
+grep -qF -- "-f ${S}/deploy-ssh/alpha/keys/prod" "${S}/trace" ||
+    fail "keygen must target the named file"
+grep -qF 'IdentityFile ~/.ssh/deploy.d/keys/prod' "${S}/out" ||
+    fail "the stanza must name the custom key"
+echo "PASS: keygen uses the requested key name"
+
+# --- keygen --rsa requests a 4096-bit RSA key --------------------------------------------------
+# ST-53: the flag switches the key type and records the RSA arguments.
+S="${T}/keygen-rsa"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+: > "${S}/trace"
+run_fleet "${S}" keygen Alpha --rsa >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "keygen --rsa should succeed"
+}
+KEYGEN_LINE="$(grep -F 'ssh-keygen' "${S}/trace" | head -1 || true)"
+case "${KEYGEN_LINE}" in
+    *'-t rsa -b 4096'*) ;;
+    *) fail "keygen --rsa must request a 4096-bit RSA key: ${KEYGEN_LINE}" ;;
+esac
+echo "PASS: keygen --rsa requests a 4096-bit RSA key"
+
+# --- keygen refuses to overwrite without --force ----------------------------------------------
+# ST-54: an existing pair (either half) blocks the command unless --force is passed; --force
+# replaces the pair.
+S="${T}/keygen-overwrite"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha/keys"
+printf 'old private\n' > "${S}/deploy-ssh/alpha/keys/id_ed25519"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen must refuse to overwrite an existing key"
+grep -q 'already exists' "${S}/out" || fail "the refusal must say the key exists"
+grep -q -- '--force' "${S}/out" || fail "the refusal must mention --force"
+[ "$(cat "${S}/deploy-ssh/alpha/keys/id_ed25519")" = "old private" ] ||
+    fail "a refused keygen must not touch the existing key"
+grep -q 'ssh-keygen' "${S}/trace" && fail "a refused keygen must not run ssh-keygen"
+run_fleet "${S}" keygen Alpha --force >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "keygen --force should replace the pair"
+}
+[ "$(cat "${S}/deploy-ssh/alpha/keys/id_ed25519")" = "PRIVATE KEY" ] ||
+    fail "keygen --force must replace the private key"
+[ "$(cat "${S}/deploy-ssh/alpha/keys/id_ed25519.pub")" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIStubOnlyKeyForTests stub@test" ] ||
+    fail "keygen --force must replace the public key"
+rm "${S}/deploy-ssh/alpha/keys/id_ed25519"
+set +e
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen must refuse when only the public half exists"
+echo "PASS: keygen refuses to overwrite without --force and replaces with it"
+
+# --- keygen error paths -----------------------------------------------------------------------
+# ST-55: missing arguments and unknown flags print usage; unknown organizations, organizations
+# without deploy_ssh, and invalid key names fail before anything is created.
+S="${T}/keygen-errors"
+new_sandbox "${S}"
+set +e
+run_fleet "${S}" keygen >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen without an organization must fail"
+grep -qi 'usage' "${S}/out" || fail "keygen without an organization must print usage"
+set +e
+run_fleet "${S}" keygen --bogus >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen with an unknown flag must fail"
+grep -qi 'usage' "${S}/out" || fail "an unknown flag must print usage"
+set +e
+run_fleet "${S}" keygen NoSuchOrg >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen with an unknown organization must fail"
+grep -q 'unknown organization' "${S}/out" || fail "keygen must report an unknown organization"
+set +e
+run_fleet "${S}" keygen Beta >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen without deploy_ssh must fail"
+grep -qF "organization 'beta' has no deploy_ssh configured" "${S}/out" ||
+    fail "keygen must name the missing deploy_ssh configuration"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+for bad_name in 'a/b' 'evil.pub'; do
+    set +e
+    run_fleet "${S}" keygen Alpha "${bad_name}" >"${S}/out" 2>&1
+    CODE=$?
+    set -e
+    [ "${CODE}" -ne 0 ] || fail "keygen with name '${bad_name}' must fail"
+    grep -q 'invalid key name' "${S}/out" ||
+        fail "keygen must report 'invalid key name' for '${bad_name}'"
+done
+[ ! -e "${S}/deploy-ssh/alpha" ] || fail "failed keygen runs must not create the deploy folder"
+echo "PASS: keygen reports usage and validation errors without side effects"
+
+# --- keygen provisions a missing deploy folder first -------------------------------------------
+# ST-56: keygen on a declared but missing folder seeds the starter files and prints the notice.
+S="${T}/keygen-provision"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "keygen should provision a missing folder"
+}
+[ -f "${S}/deploy-ssh/alpha/config" ] || fail "keygen must seed the starter config"
+[ -f "${S}/deploy-ssh/alpha/known_hosts" ] || fail "keygen must seed known_hosts"
+grep -q 'created deploy-ssh/alpha with starter files' "${S}/out" ||
+    fail "keygen must print the folder-creation notice"
+echo "PASS: keygen provisions a missing deploy folder"
 
 echo "fleet spec tests: PASS"
