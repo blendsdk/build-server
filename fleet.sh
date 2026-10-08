@@ -289,26 +289,88 @@ EOF
     echo "fleet: generated ${#ORG_NAMES[@]} runner(s): ${ORG_SLUGS[*]}"
 }
 
-# Create declared deploy folders that are missing, with restricted modes, and print a notice only
-# when a folder itself was created. Only commands that start runner containers call this, and only
-# after their confirmation and version fetch where one applies; `generate`, `status`, `down`,
-# `stop`, and `clean` must stay side-effect free. Operator material is never deleted.
+# Print the starter deploy configuration seeded into a new deploy folder. Every line is a comment:
+# the operator uncomments one example and edits it, so an untouched folder never tests a host.
+deploy_config_template() {
+    cat <<'EOF'
+# Deploy SSH configuration for this organization.
+#
+# This file is copied into the runner at ~/.ssh/deploy.d/config and included automatically;
+# do not add an Include line yourself. After editing, run: ./fleet.sh restart
+#
+# Folder contents:
+#   config       this file
+#   known_hosts  pinned server host keys (collect with: deploy-ssh-check --learn <host>)
+#   keys/        private keys referenced by IdentityFile (create with: ./fleet.sh keygen <org>)
+#
+# --- Direct target ---------------------------------------------------------------
+#
+# Host app-prod
+#     HostName 192.168.1.1
+#     User deploy
+#     Port 22
+#     IdentityFile ~/.ssh/deploy.d/keys/id_ed25519
+#     UserKnownHostsFile ~/.ssh/deploy.d/known_hosts
+#     StrictHostKeyChecking yes
+#
+# --- Target behind a bastion -----------------------------------------------------
+#
+# Host app-private
+#     HostName 10.20.1.5
+#     User deploy
+#     IdentityFile ~/.ssh/deploy.d/keys/id_ed25519
+#     UserKnownHostsFile ~/.ssh/deploy.d/known_hosts
+#     StrictHostKeyChecking yes
+#     ProxyJump deploy@bastion.example.com
+#
+# The bastion opens a separate SSH session and needs its own Host block (required):
+#
+# Host bastion.example.com
+#     HostName bastion.example.com
+#     User deploy
+#     IdentityFile ~/.ssh/deploy.d/keys/bastion
+#     UserKnownHostsFile ~/.ssh/deploy.d/known_hosts
+#     StrictHostKeyChecking yes
+#
+# Test from inside the runner:  ./fleet.sh check-ssh <org>
+EOF
+}
+
+# Create one deploy folder when missing and seed any missing starter files into it: `keys/`, a
+# commented `config`, and an empty `known_hosts`. Existing files are never modified or deleted,
+# and the creation notice prints only when the folder itself was created. Returns non-zero when
+# the path changed since validation, so callers can decide how to report that.
+seed_deploy_folder() {
+    local path="$1" rel="$2"
+    [ "$(realpath -m "${path}")" = "${path}" ] || return 1
+    if [ ! -d "${path}" ]; then
+        (umask 077 && mkdir -p "${path}/keys")
+        echo "fleet: created ${rel} with starter files (edit config, add a key, then restart the runner to apply)"
+    elif [ ! -d "${path}/keys" ]; then
+        (umask 077 && mkdir -p "${path}/keys")
+    fi
+    if [ ! -f "${path}/config" ]; then
+        (umask 077 && deploy_config_template >"${path}/config")
+    fi
+    if [ ! -f "${path}/known_hosts" ]; then
+        (umask 077 && : >"${path}/known_hosts")
+    fi
+    return 0
+}
+
+# Create declared deploy folders that are missing (or repair missing starter files), with
+# restricted modes, and print a notice only when a folder itself was created. Only commands that
+# start runner containers call this, and only after their confirmation and version fetch where one
+# applies; `generate`, `status`, `down`, `stop`, and `clean` must stay side-effect free. Operator
+# material is never deleted.
 ensure_deploy_dirs() {
     local i path rel
     for i in "${!ORG_NAMES[@]}"; do
         path="${ORG_DEPLOY_SSH[$i]}"
         [ -n "${path}" ] || continue
         rel="${path#"${ROOT}/"}"
-        if [ "$(realpath -m "${path}")" != "${path}" ]; then
+        seed_deploy_folder "${path}" "${rel}" ||
             echo "fleet: WARNING: ${rel} changed since validation; skipping deploy folder creation" >&2
-            continue
-        fi
-        if [ ! -d "${path}" ]; then
-            (umask 077 && mkdir -p "${path}/keys")
-            echo "fleet: created ${rel} (add config, known_hosts, and keys, then restart the runner to apply)"
-        elif [ ! -d "${path}/keys" ]; then
-            (umask 077 && mkdir -p "${path}/keys")
-        fi
     done
 }
 
