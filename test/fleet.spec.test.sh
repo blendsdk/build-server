@@ -664,8 +664,8 @@ run_fleet "${S}" up >"${S}/out" 2>&1 || {
 [ "$(stat -c '%a' "${S}/deploy-ssh/alpha/known_hosts")" = "600" ] ||
     fail "the seeded known_hosts must be 0600"
 [ ! -s "${S}/deploy-ssh/alpha/known_hosts" ] || fail "the seeded known_hosts must be empty"
-grep -q 'created deploy-ssh/alpha with starter files' "${S}/out" ||
-    fail "the creation notice must mention the starter files"
+grep -qF 'fleet: created deploy-ssh/alpha with starter files (edit config, add a key, then restart the runner to apply)' "${S}/out" ||
+    fail "the creation notice must pin the full starter-files text"
 if grep -vE '^[[:space:]]*(#|$)' "${S}/deploy-ssh/alpha/config" >/dev/null; then
     fail "the starter config must be fully commented"
 fi
@@ -726,6 +726,8 @@ run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1 || {
 }
 [ -f "${S}/deploy-ssh/alpha/keys/id_ed25519" ] || fail "keygen must create the private key"
 [ -f "${S}/deploy-ssh/alpha/keys/id_ed25519.pub" ] || fail "keygen must create the public key"
+[ "$(stat -c '%a' "${S}/deploy-ssh/alpha/keys/id_ed25519")" = "600" ] ||
+    fail "the private key must be 0600"
 KEYGEN_LINE="$(grep -F 'ssh-keygen' "${S}/trace" | head -1 || true)"
 case "${KEYGEN_LINE}" in
     *'-t ed25519'*) ;;
@@ -871,8 +873,59 @@ run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1 || {
 }
 [ -f "${S}/deploy-ssh/alpha/config" ] || fail "keygen must seed the starter config"
 [ -f "${S}/deploy-ssh/alpha/known_hosts" ] || fail "keygen must seed known_hosts"
-grep -q 'created deploy-ssh/alpha with starter files' "${S}/out" ||
-    fail "keygen must print the folder-creation notice"
+grep -qF 'fleet: created deploy-ssh/alpha with starter files (edit config, add a key, then restart the runner to apply)' "${S}/out" ||
+    fail "keygen must print the full folder-creation notice"
 echo "PASS: keygen provisions a missing deploy folder"
+
+# --- dangling symlinks are never followed by seeding -------------------------------------------
+# ST-57: a symlink where a starter file would be seeded counts as operator-provided state; the
+# seed must not write through it (which could create the target outside the deploy folder).
+S="${T}/deploy-ssh-dangling"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha/keys"
+ln -s "${S}/escape-config" "${S}/deploy-ssh/alpha/config"
+ln -s "${S}/escape-hosts" "${S}/deploy-ssh/alpha/known_hosts"
+run_fleet "${S}" up >"${S}/out" 2>&1 || fail "up must succeed with dangling starter symlinks"
+[ -L "${S}/deploy-ssh/alpha/config" ] || fail "a dangling config symlink must be left alone"
+[ -L "${S}/deploy-ssh/alpha/known_hosts" ] || fail "a dangling known_hosts symlink must be left alone"
+[ ! -e "${S}/escape-config" ] || fail "seeding must not create the config symlink target"
+[ ! -e "${S}/escape-hosts" ] || fail "seeding must not create the known_hosts symlink target"
+echo "PASS: dangling starter symlinks are never followed"
+
+# --- keygen refuses a symlinked keys directory --------------------------------------------------
+# ST-58: a keys/ symlink would place the private key outside the deploy folder; keygen must refuse
+# and leave the link target untouched.
+S="${T}/keygen-keys-symlink"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha" "${S}/outside"
+ln -s "${S}/outside" "${S}/deploy-ssh/alpha/keys"
+set +e
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "keygen must refuse a symlinked keys directory"
+grep -q 'symlink' "${S}/out" || fail "the refusal must name the symlink"
+[ -z "$(ls -A "${S}/outside")" ] || fail "no key material may be written through the symlink"
+echo "PASS: keygen refuses a symlinked keys directory"
+
+# --- a blocked starter path fails the command ---------------------------------------------------
+# ST-59: when a starter path cannot be created (keys is a regular file), the command must fail
+# instead of reporting success without the documented starter files.
+S="${T}/deploy-ssh-blocked"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+mkdir -p "${S}/deploy-ssh/alpha"
+printf 'not a directory\n' > "${S}/deploy-ssh/alpha/keys"
+: > "${S}/trace"
+set +e
+run_fleet "${S}" start >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "a blocked keys path must fail the command"
+grep -q 'could not create' "${S}/out" || fail "the failure must name the blocked path"
+grep -q 'docker compose' "${S}/trace" && fail "the fleet must not start after a seeding failure"
+echo "PASS: blocking a starter path fails the command"
 
 echo "fleet spec tests: PASS"

@@ -338,23 +338,31 @@ EOF
 }
 
 # Create one deploy folder when missing and seed any missing starter files into it: `keys/`, a
-# commented `config`, and an empty `known_hosts`. Existing files are never modified or deleted,
-# and the creation notice prints only when the folder itself was created. Returns non-zero when
-# the path changed since validation, so callers can decide how to report that.
+# commented `config`, and an empty `known_hosts`. Existing files (and any symlink) are never
+# modified or written through, and the creation notice prints only when the folder itself was
+# created. Returns non-zero when the path changed since validation, so callers can decide how to
+# report that; a starter path that cannot be created is a fatal error.
 seed_deploy_folder() {
     local path="$1" rel="$2"
     [ "$(realpath -m "${path}")" = "${path}" ] || return 1
     if [ ! -d "${path}" ]; then
-        (umask 077 && mkdir -p "${path}/keys")
+        (umask 077 && mkdir -p "${path}/keys") ||
+            die "could not create ${rel}/keys"
         echo "fleet: created ${rel} with starter files (edit config, add a key, then restart the runner to apply)"
     elif [ ! -d "${path}/keys" ]; then
-        (umask 077 && mkdir -p "${path}/keys")
+        (umask 077 && mkdir -p "${path}/keys") ||
+            die "could not create ${rel}/keys"
     fi
-    if [ ! -f "${path}/config" ]; then
-        (umask 077 && deploy_config_template >"${path}/config")
+    # Only completely absent paths are seeded: an existing file — or any symlink, even a dangling
+    # one — is operator-provided state, and writing through it could create files outside the
+    # deploy folder.
+    if [ ! -e "${path}/config" ] && [ ! -L "${path}/config" ]; then
+        (umask 077 && deploy_config_template >"${path}/config") ||
+            die "could not write ${rel}/config"
     fi
-    if [ ! -f "${path}/known_hosts" ]; then
-        (umask 077 && : >"${path}/known_hosts")
+    if [ ! -e "${path}/known_hosts" ] && [ ! -L "${path}/known_hosts" ]; then
+        (umask 077 && : >"${path}/known_hosts") ||
+            die "could not write ${rel}/known_hosts"
     fi
     return 0
 }
@@ -878,6 +886,9 @@ case "${COMMAND}" in
         keygen_rel="${keygen_path#"${ROOT}/"}"
         seed_deploy_folder "${keygen_path}" "${keygen_rel}" ||
             die "${keygen_rel} changed since validation; refusing to write into it"
+        if [ -L "${keygen_path}/keys" ]; then
+            die "${keygen_rel}/keys is a symlink; refusing to write a key through it"
+        fi
         keygen_key="${keygen_path}/keys/${keygen_name}"
         if [ "${keygen_force}" != "1" ]; then
             if [ -e "${keygen_key}" ] || [ -e "${keygen_key}.pub" ]; then

@@ -272,7 +272,8 @@ run_fleet "${S}" up >"${S}/out" 2>&1 || {
     cat "${S}/out" >&2
     fail "up should create the deploy folder and continue"
 }
-grep -q 'created deploy-ssh/alpha' "${S}/out" || fail "the first up must announce the created folder"
+grep -qF 'fleet: created deploy-ssh/alpha with starter files (edit config, add a key, then restart the runner to apply)' \
+    "${S}/out" || fail "the first up must announce the created folder with the full notice"
 
 run_fleet "${S}" up >"${S}/out" 2>&1 || {
     cat "${S}/out" >&2
