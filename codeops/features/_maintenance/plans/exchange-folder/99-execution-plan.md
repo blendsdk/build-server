@@ -1,7 +1,7 @@
 # Task T-15: Shared artifact exchange folder
 
 > **Type**: Task (lightweight) · **Feature**: _maintenance · **CodeOps Artifact Schema**: 1
-> **Progress**: 3/4 tasks (75%)
+> **Progress**: 4/4 tasks (100%)
 > **Reasoning**: medium — user-facing fleet behavior; a world-writable host folder is mounted into privileged runner containers, so the mount and seeding rules must stay predictable
 > **Phase baseline tree**: da6599d21f969b1cd754a1e6a24fe883e4215730
 > **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `test/orgs.spec.test.sh` (three existing compose-model cases become position-independent; one model-level exchange case is added), `.gitignore`, `docs/reference/files.md`, `docs/guide/organizations.md`, `docs/guide/cli.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/_maintenance/00-roadmap.md`, `codeops/00-roadmap.md`)
@@ -57,7 +57,8 @@ ignore `/exchange/` in `.gitignore`. No `orgs.conf` option, no new command, no c
 - [x] T-15.3 Implement: the exchange bind mount in `render_compose()`, `seed_exchange_folder()` +
   `ensure_exchange_dirs()` wired to the six runner-starting call sites, `/exchange/` in `.gitignore` ✅ (completed: 2026-10-08 16:19 — full verify passes; the orgs compose-model cases
   adapted to find mounts by target)
-- [ ] T-15.4 Update the docs (`docs/reference/files.md`, `docs/guide/organizations.md`,
-  `docs/guide/cli.md`) and run the full verification
+- [x] T-15.4 Update the docs (`docs/reference/files.md`, `docs/guide/organizations.md`,
+  `docs/guide/cli.md`) and run the full verification ✅ (completed: 2026-10-08 16:20 — full verify
+  and docs build pass)
 
 **Verify**: `bash test/verify.sh`; because docs change, also `npm run docs:build`

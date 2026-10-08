@@ -24,6 +24,7 @@
 | `.npmrc`, `.yarnrc`, `.bunfig.toml`, `config.json` | Host credentials baked into the image |
 | `ssh/` | Staged by `fleet.sh build` from `~/.ssh` |
 | `deploy-ssh/` | Host folder with deploy SSH material (`config`, `known_hosts`, `keys/`) mounted read-only into declaring runners; the CLI seeds a starter `config` and an empty `known_hosts` (gitignored) — see [Deploy over SSH](/guide/deploy-ssh) |
+| `exchange/` | Host folder per organization (`exchange/<org>`) mounted read-write at `/srv/exchange` for jobs and nested containers; created with mode 0777 by commands that start runners (gitignored) — see [Organizations](/guide/organizations#shared-exchange-folder) |
 | `examples/` | Offline playground with stub `docker`/`curl` (development only) |
 | `test/` | Specification and implementation tests, `smoke-workflow.yml`, `verify.sh` (development only) |
 | `docs/` | This VitePress site (development only) |

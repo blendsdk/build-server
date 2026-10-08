@@ -67,6 +67,9 @@ the images and the build cache, because it only recreates containers.
   `upgrade-all`) create a missing folder declared with `deploy_ssh=`, seeding a starter `config`,
   an empty `known_hosts`, and `keys/`; `keygen` seeds it too before writing a key; `generate` and
   `status` never create one. See [Deploy over SSH](/guide/deploy-ssh).
+- The same commands also create a missing `exchange/<org>` folder (mode `0777`) mounted read-write
+  at `/srv/exchange`; an existing folder is never modified, and `down`, `stop`, and `clean` leave
+  it alone. See [Organizations](/guide/organizations#shared-exchange-folder).
 - `update <org>` and `update-runners` recreate containers and kill any job running on the affected
   runners. Run them between jobs.
 - `down` removes the runner registrations for the configured organizations through the GitHub API,

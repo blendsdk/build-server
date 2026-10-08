@@ -37,6 +37,25 @@ default), so several installations can share one Docker host.
 Be aware of slug collisions (`Foo.Bar` and `Foo-Bar` both become `foobar`); `generate` rejects
 them.
 
+## Shared exchange folder
+
+Every organization gets a shared artifact folder: the host folder `exchange/<slug>/` is mounted
+read-write at `/srv/exchange` in that organization's runner, so jobs and the host operator can
+drop and read files that outlive a runner recreation. Nested job containers can mount it too:
+
+```bash
+docker run -v /srv/exchange:/exchange ...
+```
+
+`up`, `restart`, `start`, `update`, `update-runners`, and `upgrade-all` create a missing folder
+with mode `0777`; an existing folder is never modified. `generate`, `status`, `down`, `stop`, and
+`clean` never create the folder, and teardown never deletes or modifies it. An entry that is not a
+directory (for example a stray file) stops the command with a clear message before any container
+starts.
+
+Treat the folder as a shared zone inside the organization: every job of the organization can read,
+replace, or delete its contents, so do not store secrets there.
+
 ## Adding and removing organizations
 
 ```bash
