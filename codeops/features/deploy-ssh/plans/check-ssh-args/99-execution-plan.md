@@ -1,7 +1,7 @@
 # Task T-03: Pass extra arguments through check-ssh
 
 > **Type**: Task (lightweight) · **Feature**: deploy-ssh · **CodeOps Artifact Schema**: 1
-> **Progress**: 1/4 tasks (25%)
+> **Progress**: 2/4 tasks (50%)
 > **Reasoning**: medium — user-facing CLI change; the passthrough must stay argv-based
 > **Phase baseline tree**: 755f5cac7f37b8820950311990ab62c8c24fa770
 > **Expected changes** (scope: strict): `fleet.sh`, `test/fleet.spec.test.sh`, `docs/guide/deploy-ssh.md`, `docs/guide/cli.md`, and the plan/roadmap documents (`99-execution-plan.md`, `00-review-report.md`, `codeops/features/deploy-ssh/00-roadmap.md`, `codeops/00-roadmap.md`)
