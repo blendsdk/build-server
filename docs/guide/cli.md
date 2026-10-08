@@ -16,7 +16,7 @@
 | `./fleet.sh clean [--yes]` | Removes this installation's unused images, containers, networks, and volumes, plus the host build cache |
 | `./fleet.sh upgrade-all [--yes]` | Fetches the latest Actions runner, stops the fleet, cleans unused resources, rebuilds every image, and restarts |
 | `./fleet.sh status` | Prints organizations, services, images, container state, and the pinned version |
-| `./fleet.sh check-ssh <org>` | Runs the deploy SSH connectivity check in that organization's runner |
+| `./fleet.sh check-ssh <org> [args]` | Runs the deploy SSH connectivity check in that organization's runner; extra arguments go to `deploy-ssh-check` (for example `--learn <host>`) |
 | `./fleet.sh keygen <org> [name]` | Creates a deploy key pair in that organization's deploy folder (`ed25519`; `--rsa`, `--force`) |
 
 ## How the files fit together

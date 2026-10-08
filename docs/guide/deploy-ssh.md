@@ -139,15 +139,15 @@ SSH must recognize each target's host key, or a non-interactive job fails with
 
 ### Learn the keys
 
-Run the checker's learn mode inside the runner. It resolves each target and its bastion and prints
+Run the checker's learn mode through `fleet.sh`. It resolves each target and its bastion and prints
 ready-to-paste `known_hosts` lines:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.generated.yml \
-  exec -u docker acmetools deploy-ssh-check --learn app-prod
+./fleet.sh check-ssh AcmeTools --learn app-prod
 ```
 
-Run this from the repository root, so Docker Compose reads the same project name as `fleet.sh`.
+Extra arguments after the organization are passed straight to `deploy-ssh-check`, so learn mode
+and explicit host lists share the same short command.
 
 For a private target behind a bastion, the command collects the key **on the bastion** and prints
 it, because the runner cannot reach the target directly. `--learn` never writes files.
@@ -202,15 +202,16 @@ the container and interrupts any job running on it — do it between jobs.
 ```
 
 This runs `deploy-ssh-check` in that organization's runner as the `docker` user and propagates its
-exit code. The script is also installed at `/usr/local/bin/deploy-ssh-check` inside the container.
+exit code. Extra arguments after the organization are passed straight to the checker — use them for
+`--learn <host>` or an explicit host list. The script is also installed at
+`/usr/local/bin/deploy-ssh-check` inside the container.
 
 Without arguments, the check tests every literal hostname in the `Host` lines of your config.
 Pattern entries (`*`, `?`, `!`) are listed once as skipped, because a pattern can match many hosts.
 Pass explicit hostnames to test a pattern:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.generated.yml \
-  exec -u docker acmetools deploy-ssh-check app-worker-01 app-worker-02
+./fleet.sh check-ssh AcmeTools app-worker-01 app-worker-02
 ```
 
 Output:
