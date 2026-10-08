@@ -4,7 +4,8 @@
 # Covers internals the specification tests do not pin: byte-identical idempotence, the atomic
 # temp file, preservation of the previous output when generation fails, whitespace/comment
 # handling in orgs.conf, and the deploy_ssh folder lifecycle (auto-creation on the remaining
-# container-starting commands, idempotent rendering, and preservation of operator material).
+# container-starting commands, idempotent rendering, preservation of operator material, starter
+# file seeding, and real-ssh-keygen key generation).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -353,5 +354,69 @@ CURL_BODY='{"tag_name":"v9.9.9"}' run_fleet "${S}" upgrade-all --yes >"${S}/out"
 [ "$(cat "${S}/deploy-ssh/alpha/keep.txt")" = "secret" ] ||
     fail "upgrade-all must not delete files inside deploy-ssh/alpha"
 echo "PASS: upgrade-all --yes preserves deploy-ssh folders and contents"
+
+# --- keygen (real ssh-keygen): a valid matching pair with restricted modes --------------------
+S="${T}/keygen-real"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1 || {
+    cat "${S}/out" >&2
+    fail "keygen with the real ssh-keygen should succeed"
+}
+KEY="${S}/deploy-ssh/alpha/keys/id_ed25519"
+[ -f "${KEY}" ] || fail "keygen must create the private key"
+[ -f "${KEY}.pub" ] || fail "keygen must create the public key"
+[ "$(stat -c '%a' "${KEY}")" = "600" ] || fail "the private key must be 0600"
+grep -q 'BEGIN OPENSSH PRIVATE KEY' "${KEY}" || fail "the private key must be a real OpenSSH key"
+DERIVED="$(ssh-keygen -y -f "${KEY}" | awk '{print $1" "$2}')"
+PUB_FIELDS="$(awk '{print $1" "$2}' "${KEY}.pub")"
+[ "${DERIVED}" = "${PUB_FIELDS}" ] || fail "the public key must match the private key"
+case "${DERIVED}" in
+    ssh-ed25519\ *) ;;
+    *) fail "the default key must be ed25519" ;;
+esac
+echo "PASS: keygen produces a valid matching pair with 0600"
+
+# --- starter files are byte-identical across provisioning runs --------------------------------
+S="${T}/seed-idempotent"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" up >/dev/null 2>&1 || fail "the first up must seed the deploy folder"
+cp "${S}/deploy-ssh/alpha/config" "${S}/config.first"
+cp "${S}/deploy-ssh/alpha/known_hosts" "${S}/known_hosts.first"
+run_fleet "${S}" up >"${S}/out" 2>&1 || fail "the second up must succeed"
+cmp -s "${S}/config.first" "${S}/deploy-ssh/alpha/config" ||
+    fail "the starter config must stay byte-identical"
+cmp -s "${S}/known_hosts.first" "${S}/deploy-ssh/alpha/known_hosts" ||
+    fail "the seeded known_hosts must stay byte-identical"
+grep -q 'created deploy-ssh/alpha' "${S}/out" &&
+    fail "the second up must not announce a creation"
+echo "PASS: starter files are byte-identical across provisioning runs"
+
+# --- keygen --force replaces a real pair; a refusal preserves it ------------------------------
+S="${T}/keygen-force"
+new_sandbox "${S}"
+printf 'Alpha deploy_ssh=deploy-ssh/alpha\n' > "${S}/orgs.conf"
+stub_tools "${S}"
+: > "${S}/trace"
+run_fleet "${S}" keygen Alpha >/dev/null 2>&1 || fail "the first keygen must succeed"
+KEY="${S}/deploy-ssh/alpha/keys/id_ed25519"
+cp "${KEY}.pub" "${S}/pub.first"
+set +e
+run_fleet "${S}" keygen Alpha >"${S}/out" 2>&1
+CODE=$?
+set -e
+[ "${CODE}" -ne 0 ] || fail "the second keygen must refuse to overwrite"
+cmp -s "${S}/pub.first" "${KEY}.pub" || fail "a refused keygen must preserve the pair"
+run_fleet "${S}" keygen Alpha --force >/dev/null 2>&1 || fail "keygen --force must replace the pair"
+cmp -s "${S}/pub.first" "${KEY}.pub" && fail "keygen --force must generate a new pair"
+DERIVED="$(ssh-keygen -y -f "${KEY}" | awk '{print $1" "$2}')"
+PUB_FIELDS="$(awk '{print $1" "$2}' "${KEY}.pub")"
+[ "${DERIVED}" = "${PUB_FIELDS}" ] || fail "the forced pair must be valid"
+echo "PASS: keygen refuses to overwrite and --force replaces the pair"
 
 echo "fleet impl tests: PASS"
